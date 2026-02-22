@@ -62,39 +62,7 @@ O **Registry**, por sua vez, é onde ficam guardadas as imagens. O mais famoso �
 
 ### 2.2 A Mágica do Isolamento (Kernel do Linux)
 
-**Antes de etendermos esse ponto, precisamos entender o que é uma VM:**
-
----
-**O que é uma VM "tradicional"?**
-
-Uma Máquina Virtual (VM) é uma tentativa de simular um computador físico completo dentro de outro. Para isso, ela usa um software chamado Hypervisor (como VirtualBox ou VMware).
-
-**Como uma VM é montada:**
-
-* **Hardware Real:** O seu computador físico.
-* **Hypervisor:** O software que divide os recursos do hardware.
-* **Sistema Operacional Convidado (Guest OS):** Aqui está o "peso". Cada VM precisa de uma cópia inteira de um sistema operacional (Windows ou Linux). Se você subir 10 VMs, terá 10 sistemas operacionais rodando simultaneamente.
-* **Binários/Bibliotecas:** O que o seu app precisa.
-* **App:** O seu código.
-
-**O problema:** As VMs são pesadas. Elas demoram minutos para ligar (boot) e consomem muita RAM e disco só para manter o sistema operacional "convidado" funcionando, antes mesmo de rodar o seu app.
-
-**Como o Docker se diferencia?**
-
-O Docker não simula o hardware. **Ele compartilha o Kernel** (o núcleo) do sistema operacional que já está rodando no seu computador (o Host).
-
-**Como o Docker é montado:**
-
-* **Hardware Real:** O seu computador.
-* **Sistema Operacional Host:** O seu Windows, Mac ou Linux.
-* **Docker Engine:** Em vez de um Hypervisor pesado, temos um motor leve que gerencia o isolamento.
-* **Binários/Bibliotecas:** Apenas o estritamente necessário para o app.
-* **App:** O seu código dentro do container.
----
-
 Diferente das VMs, o Docker não instala um sistema operacional inteiro dentro de cada container. Ele usa recursos do próprio "núcleo" (Kernel) do sistema hospedeiro para isolar os processos (Imagine que as VMs são casas independentes e o Docker são apartamentos em um prédio):
-
-
 
 * **Namespaces**: Garantem que cada container tenha sua própria visão do sistema (rede, usuários, processos), como se estivesse sozinho no computador.
 
@@ -109,3 +77,209 @@ Este é o segredo da leveza do Docker. As imagens são compostas por camadas sob
 * As camadas de baixo são somente leitura e podem ser compartilhadas entre vários containers, economizando muito espaço em disco.
 
 ---
+
+## 3. Primeiros passos 
+
+### 3.1 Instalação (O Motor)
+
+Antes de tudo, você precisa do Docker rodando no seu computador.
+
+* Acesse o site oficial **`Docker Desktop`**. 
+* Baixe a versão para o seu sistema (Windows, Mac ou Linux).
+* Dica para Windows: Ele vai pedir para instalar o "WSL 2" (Windows Subsystem for Linux). Aceite e instale, pois é isso que permite ao Docker rodar com performance nativa no Windows.
+* Após instalar e reiniciar, abra o Docker Desktop e espere o ícone da baleia ficar parado (verde).
+
+### 3.2 O Primeiro Teste (Hello World)
+
+Abra o seu terminal (PowerShell no Windows, ou Terminal no Mac/Linux) e digite: **`docker run hello-world`**
+
+O que vai acontecer?
+
+* O Client pergunta ao Daemon se ele tem a imagem hello-world.
+* Como você acabou de instalar, ele não terá. Ele vai dizer: Unable to find image... locally.
+* Ele vai baixar (Pull) a imagem do Docker Hub.
+* Ele vai criar o Container e rodar. Você verá uma mensagem de boas-vindas na tela.
+
+### 3.3 Rodando um Servidor de Simulado:
+
+Vamos subir um servidor de sites (Nginx) sem instalar nada no seu OS. O objetivo é simular o ambiente de um servidor real sem sair da sua máquina.
+
+**`docker run -d -p 8080:80 --name meu-site nginx`**
+
+Explicando os termos:
+
+* **`-d`** (Detached): Roda o container em segundo plano (você pode continuar usando o terminal).
+* **`-p 7777:80`**: Redireciona a porta 8080 do seu PC para a porta 80 dentro do container.
+* **`--name meu-site`**: Dá um nome amigável ao seu container.
+* Teste agora: Abra o navegador e digite **`localhost:7777`**. Você verá a página "Welcome to nginx!".
+
+O que fizemos aqui: 
+
+* 1) Baixou um software pronto (Nginx) sem precisar configurar instaladores .exe ou .msi.
+* 2) Reservou uma fatia da sua memória para esse software rodar sem interferir em outros programas.
+* 3) Criou uma ponte de comunicação (-p) para que seu navegador pudesse falar com um software "preso" dentro de um container.
+
+### 3.4 Rodando um Servidor de Verdade: 
+
+Para realizar essa atividade precisamos de um **`Dockerfile`**, mas afinal o que é isso? 
+
+**`Dockerfile`** é um arquivo de texto simples, sem extensão (o nome é apenas Dockerfile), que contém uma lista de instruções e encontra-se localizado no mesmo diretório do nosso projeto. O Docker lê esse arquivo e executa cada linha para "buildar" (construir) uma imagem personalizada para o seu projeto.
+
+**Por que precisamos dele no diretório do projeto?**
+
+Ter o Dockerfile junto com o seu código (no mesmo diretório) é o que garante a **portabilidade**.
+
+* **Padronização:** Qualquer pessoa que baixar seu projeto (um novo colega de equipe, por exemplo) só precisa digitar docker build. O Dockerfile vai garantir que o ambiente dele seja idêntico ao seu.
+* **Automação:** Quando você envia seu código para a nuvem (como AWS ou Google Cloud), o servidor lá lê o seu Dockerfile e sabe exatamente como "montar" sua aplicação para colocá-la no ar.
+* **Versionamento:** O Dockerfile fica salvo no seu Git. Se você mudar a versão do seu banco de dados, essa mudança fica registrada no histórico do projeto.
+
+**Como é a estrutura de um dockerfile?**
+
+Um Dockerfile funciona em camadas. Cada comando cria uma nova camada na imagem. A estrutura básica segue este fluxo:
+
+* 1) **FROM:** De onde vamos começar? (A imagem base).
+* 2) **WORKDIR:** Onde vamos trabalhar dentro do container? (A pasta do projeto).
+* 3) **COPY/ADD:** Quais arquivos do meu PC eu quero levar para dentro do container?
+* 4) **RUN:** Quais comandos de instalação preciso rodar? (Ex: npm install ou pip install).
+* 5) **EXPOSE:** Qual porta o container vai "abrir"?
+* 6) **CMD:** Qual o comando final para ligar a aplicação?
+
+**Exemplo prático:**
+
+Imagine que você tem um site simples em Node.js. O seu Dockerfile seria assim:
+
+```dockerfile 
+# 1. Define a imagem base (já vem com Node.js instalado)
+FROM node:18
+
+# 2. Cria uma pasta dentro do container para o seu código
+WORKDIR /app
+
+# 3. Copia os arquivos de dependências primeiro (otimiza o cache)
+COPY package*.json ./
+
+# 4. Roda o comando para instalar as bibliotecas
+RUN npm install
+
+# 5. Copia o restante dos arquivos do seu projeto
+COPY . .
+
+# 6. Informa que o app usa a porta 3000
+EXPOSE 3000
+
+# 7. O comando que "liga" o site de fato
+CMD ["node", "server.js"]
+```
+
+**Como usar esse arquivo?**
+
+Depois de criar esse arquivo na raiz do seu projeto, você usa dois comandos no terminal:
+
+* 1) Construir a imagem:
+**`docker build -t meu-projeto .`**
+(O ponto . diz que o Dockerfile está na pasta atual).
+
+* 2) Rodar o container:
+***`docker run -p 3000:3000 meu-projeto`***
+
+**Por que essa ordem importa?**
+
+Repare que no exemplo eu copiei o package.json antes do resto do código.
+O motivo: O Docker é inteligente. Se você mudar uma linha de texto no seu site, mas não instalar nenhuma biblioteca nova, o Docker percebe que a camada do RUN npm install não mudou e pula ela, tornando o processo de "rebuild" absurdamente rápido.
+
+
+### 3.5 Lista de Comandos: 
+
+Comandos de Criação e Construção
+---
+- **`docker build -t nome-da-imagem`** 
+
+Cria uma imagem a partir do Dockerfile que está na pasta atual (**`.`**). O **`-t`** serve para dar uma "tag" (nome) à imagem. **Esse comando precisa ser dado no mesmo diretorio do projeto.**
+
+
+- **`docker images`**
+
+Lista todas as imagens que você já baixou ou construiu no seu computador.
+
+Comandos de Execução (Ciclo de Vida)
+--- 
+- **`docker run -d --name meu-container -p 7777:99 nome-da-imagem`**	
+
+Baixa a imagem, cria e inicia novo um container (se não tiver). 
+
+**`-d`**: Roda em segundo plano (background).
+
+**`-p`**: Mapeia a porta (PC:Container).
+
+**`7777:99`**: 7777 (Lado do Host/Seu PC) é a porta que você vai digitar no seu navegador (localhost:8080). Você pode escolher quase qualquer número aqui (ex: 7777, 9000, 5000), desde que não esteja sendo usado por outro programa. 99 (Lado do Container) é a porta onde o software dentro do container está configurado para "ouvir"
+
+- **`docker stop nome-do-container`**
+
+Desliga o container graciosamente.
+
+
+- **`docker start nome-do-container`**
+
+Liga um container que estava parado (mantendo as alterações feitas nele).
+
+
+- **`docker restart nome-do-container`**
+
+Desliga e liga novamente.
+
+
+- **`docker ps`**
+
+Lista os containers que estão rodando agora.
+
+
+- **`docker ps -a`**
+
+Lista todos os containers (rodando e parados).
+
+Comandos de Limpeza (Descarte)
+---
+
+- **`docker rm nome-do-container`**
+
+Apaga um container (ele precisa estar parado).
+
+
+- **`docker rmi nome-da-imagem`**
+
+Apaga uma imagem do seu disco.
+
+- **`docker system prune`**
+O "limpa tudo": apaga todos os containers parados e imagens sem uso de uma vez.
+
+Comandos de Rede e Comunicação 
+---
+
+- **`docker network create minha-rede`**
+
+Criar uma rede 
+
+- **`docker run -d --name banco --network minha-rede mongo`**
+
+Rodar o banco de dados na rede
+
+- **`docker run -d --name site --network minha-rede meu-site-imagem`**
+
+Rodar o Site na mesma rede
+
+- **`docker network ls`**
+
+Listar todas as redes criadas
+
+- **`docker network inspect nome-da-rede`**
+
+Mostra detalhes da rede, incluindo quais containers estão nela e quais os IPs internos (caso você precise muito saber o IP).
+
+Comandos de Inspeção (O que está acontecendo lá dentro?)
+---
+- **`docker logs -f nome-do-container`**
+
+Mostra em tempo real o que o seu app está "printando" no console (ajuda muito a achar erros).
+
+- **`docker exec -it nome-do-container sh`**
+(ou bash). Este comando "entra" no container. É como se você abrisse um terminal dentro daquela máquina isolada para navegar nas pastas.

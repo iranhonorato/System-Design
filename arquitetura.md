@@ -90,7 +90,7 @@ O pool de conexões é uma estratégia em que um conjunto pré-definido de conex
 ### 1.3 Arquitetura Cliente-Servidor
 
 **Definição:** Essa é a mãe de todas as arquiteturas modernas.
-É mais antiga e mais simples que a 3‑tier, mas extremamente importante. Trata-se de um modelo onde o *cliente* faz uma requisição e o *servidor* atende a requisição.
+É mais antiga e mais simples que a 3‑tier, mas extremamente importante. Trata-se de um modelo onde o **cliente** faz uma requisição e o **servidor** atende a requisição.
 
 **Exemplos clássicos:**
 - Navegador (cliente) → Site (Servidor)

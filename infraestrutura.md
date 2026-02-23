@@ -61,7 +61,7 @@ Uma empresa comprava um servidor físico (Dell, HP, IBM). Instalava-se um Sistem
 ### 2) Era da Virtualização (As Máquinas Virtuais)
 ---
 
-Em 1999/2000, a VMware popularizou a virtualização, mudando o jogo. A ideia era criar uma camada de software que "fingia" ser hardware.
+Em 1999/2000, a VMware popularizou a virtualização, mudando o jogo. A ideia era criar uma camada de software que "fingia" ser hardware. Uma Máquina Virtual (VM) é uma tentativa de simular um computador físico completo dentro de outro. Para isso, ela usa um software chamado Hypervisor (como VirtualBox ou VMware).
 
 **Como a tecnologia melhorou:**
 
@@ -70,6 +70,14 @@ Introduziu-se o Hypervisor (uma camada entre o hardware e o SO). Ele permite cri
 **Como era feito com VMs:**
 
 Em um único servidor físico, você criava 5 VMs. Cada VM tinha seu próprio disco virtual, sua própria memória RAM reservada e, crucialmente, seu próprio Sistema Operacional completo (Guest OS).
+
+**Como uma VM é montada:**
+
+* **Hardware Real:** O seu computador físico.
+* **Hypervisor:** O software que divide os recursos do hardware.
+* **Sistema Operacional Convidado (Guest OS):** Aqui está o "peso". Cada VM precisa de uma cópia inteira de um sistema operacional (Windows ou Linux). Se você subir 10 VMs, terá 10 sistemas operacionais rodando simultaneamente.
+* **Binários/Bibliotecas:** O que o seu app precisa.
+* **App:** O seu código.
 
 **Problemas observados (O "Peso"):**
 
@@ -100,7 +108,16 @@ O segredo é que o Docker compartilha o motor (Kernel), mas isola a lataria (Use
 
 **Como ele isola as dependências sem o Hardware?**
 
-O Docker usa uma tecnologia do Kernel chamada Namespaces. Imagine que o Kernel é um recepcionista de um prédio. No *Bare Metal*, todo mundo está no saguão. Se alguém grita "Porta 80 é minha!", todos ouvem. No Docker, o Kernel cria "bolhas de realidade" (Namespaces). Por exemplo: O Container "A" acha que o disco dele só tem a pasta /app. Ele não consegue ver a pasta /app do vizinho porque o Kernel mente para ele. Além disso, o Container "A" acha que o IP dele é 172.17.0.2, o vizinho tem outro etc. Outro faotr é: seu app dentro do container acha que é o processo nº 1 (o dono do sistema). No seu Windows/Linux real, ele é apenas o processo nº 5432.
+O Docker usa uma tecnologia do Kernel chamada Namespaces. Imagine que o Kernel é um recepcionista de um prédio. No *Bare Metal*, todo mundo está no saguão. Se alguém grita "Porta 80 é minha!", todos ouvem. No Docker, o Kernel cria "bolhas de realidade" (Namespaces). Por exemplo: O Container "A" acha que o disco dele só tem a pasta /app. Ele não consegue ver a pasta /app do vizinho porque o Kernel mente para ele. Além disso, o Container "A" acha que o IP dele é **`172.17.0.2`**, o vizinho tem outro etc. Outro fator é: seu app dentro do container acha que é o processo nº 1 (o dono do sistema). No seu Windows/Linux real, ele é apenas o processo nº 5432.
+
+**Como o Docker é montado:**
+
+* **Hardware Real:** O seu computador.
+* **Sistema Operacional Host:** O seu Windows, Mac ou Linux.
+* **Docker Engine:** Em vez de um Hypervisor pesado, temos um motor leve que gerencia o isolamento.
+* **Binários/Bibliotecas:** Apenas o estritamente necessário para o app.
+* **App:** O seu código dentro do container.
+
 
 **O Salto de Eficiência:**
 
@@ -110,31 +127,3 @@ O Docker usa uma tecnologia do Kernel chamada Namespaces. Imagine que o Kernel �
 
 * **Imutabilidade (Infraestrutura como Código):** O ambiente é definido no Dockerfile. Se rodar no seu PC, rodará igual em qualquer lugar, pois o "ambiente" está lacrado no container.
 
-**OBSERVAÇÃO**
----
-**O que é uma VM "tradicional"?**
-
-Uma Máquina Virtual (VM) é uma tentativa de simular um computador físico completo dentro de outro. Para isso, ela usa um software chamado Hypervisor (como VirtualBox ou VMware).
-
-**Como uma VM é montada:**
-
-* **Hardware Real:** O seu computador físico.
-* **Hypervisor:** O software que divide os recursos do hardware.
-* **Sistema Operacional Convidado (Guest OS):** Aqui está o "peso". Cada VM precisa de uma cópia inteira de um sistema operacional (Windows ou Linux). Se você subir 10 VMs, terá 10 sistemas operacionais rodando simultaneamente.
-* **Binários/Bibliotecas:** O que o seu app precisa.
-* **App:** O seu código.
-
-**O problema:** As VMs são pesadas. Elas demoram minutos para ligar (boot) e consomem muita RAM e disco só para manter o sistema operacional "convidado" funcionando, antes mesmo de rodar o seu app.
-
-**Como o Docker se diferencia?**
-
-O Docker não simula o hardware. **Ele compartilha o Kernel** (o núcleo) do sistema operacional que já está rodando no seu computador (o Host).
-
-**Como o Docker é montado:**
-
-* **Hardware Real:** O seu computador.
-* **Sistema Operacional Host:** O seu Windows, Mac ou Linux.
-* **Docker Engine:** Em vez de um Hypervisor pesado, temos um motor leve que gerencia o isolamento.
-* **Binários/Bibliotecas:** Apenas o estritamente necessário para o app.
-* **App:** O seu código dentro do container.
----

@@ -89,6 +89,29 @@ Antes de tudo, você precisa do Docker rodando no seu computador.
 * Dica para Windows: Ele vai pedir para instalar o "WSL 2" (Windows Subsystem for Linux). Aceite e instale, pois é isso que permite ao Docker rodar com performance nativa no Windows.
 * Após instalar e reiniciar, abra o Docker Desktop e espere o ícone da baleia ficar parado (verde).
 
+**Observação:**
+---
+
+WSL significa Windows Subsystem for Linux (Subsistema do Windows para Linux). É uma funcionalidade do Windows que permite rodar Linux diretamente dentro do Windows, sem precisar instalar máquina virtual ou fazer dual boot.
+
+**O que isso significa na prática?** 
+
+Com o WSL você pode:
+
+* Usar o terminal do Linux (bash)
+* Instalar distribuições como Ubuntu, Debian, Kali
+* Rodar comandos como ls, grep, apt, ssh
+* Desenvolver com ferramentas Linux (Node, Python, Docker, etc.)
+* Trabalhar com desenvolvimento backend, DevOps e programação em geral
+
+**Existe mais de uma versão?**
+
+* WSL = tecnologia do Windows para rodar Linux dentro do Windows
+* WSL 1 = primeira versão (tradução de chamadas do Linux para o Windows)
+* WSL 2 = segunda versão, usa um kernel Linux real (muito mais rápido e compatível)
+
+---
+
 ### 3.2 O Primeiro Teste (Hello World)
 
 Abra o seu terminal (PowerShell no Windows, ou Terminal no Mac/Linux) e digite: **`docker run hello-world`**
@@ -175,12 +198,19 @@ CMD ["node", "server.js"]
 
 Depois de criar esse arquivo na raiz do seu projeto, você usa dois comandos no terminal:
 
-* 1) Construir a imagem:
-**`docker build -t meu-projeto .`**
-(O ponto . diz que o Dockerfile está na pasta atual).
+* Construir a imagem:
 
-* 2) Rodar o container:
-***`docker run -p 3000:3000 meu-projeto`***
+```bash
+docker build -t meu-projeto .
+```
+
+O ponto . diz que o Dockerfile está na pasta atual.
+
+* Rodar o container:
+
+```bash
+docker run -p 3000:3000 meu-projeto
+```
 
 **Por que essa ordem importa?**
 
@@ -190,96 +220,147 @@ O motivo: O Docker é inteligente. Se você mudar uma linha de texto no seu site
 
 ### 3.5 Lista de Comandos: 
 
-Comandos de Criação e Construção
+## **Comandos de Criação e Construção**
+
+Cria uma imagem a partir do Dockerfile que está na pasta atual.
 ---
-- **`docker build -t nome-da-imagem`** 
 
-Cria uma imagem a partir do Dockerfile que está na pasta atual (**`.`**). O **`-t`** serve para dar uma "tag" (nome) à imagem. **Esse comando precisa ser dado no mesmo diretorio do projeto.**
+```bash
+docker build -t nome-da-imagem .
+```
 
+ O **`-t`** serve para dar uma "tag" (nome) à imagem. **Esse comando precisa ser dado no mesmo diretorio do projeto.**
 
-- **`docker images`**
 
 Lista todas as imagens que você já baixou ou construiu no seu computador.
+---
+```bash
+docker images
+```
 
-Comandos de Execução (Ciclo de Vida)
---- 
-- **`docker run -d --name meu-container -p 7777:99 nome-da-imagem`**	
+## **Comandos de Execução (Ciclo de Vida)**
+
 
 Baixa a imagem, cria e inicia novo um container (se não tiver). 
+--- 
+```bash
+docker run -d --name meu-container -p 7777:99 nome-da-imagem
+```
 
-**`-d`**: Roda em segundo plano (background).
+* **`-d`**: Roda em segundo plano (background).
 
-**`-p`**: Mapeia a porta (PC:Container).
+* **`-p`**: Mapeia a porta (PC:Container).
 
-**`7777:99`**: 7777 (Lado do Host/Seu PC) é a porta que você vai digitar no seu navegador (localhost:8080). Você pode escolher quase qualquer número aqui (ex: 7777, 9000, 5000), desde que não esteja sendo usado por outro programa. 99 (Lado do Container) é a porta onde o software dentro do container está configurado para "ouvir"
-
-- **`docker stop nome-do-container`**
+* **`7777:99`**: 7777 (Lado do Host/Seu PC) é a porta que você vai digitar no seu navegador (localhost:8080). Você pode escolher quase qualquer número aqui (ex: 7777, 9000, 5000), desde que não esteja sendo usado por outro programa. 99 (Lado do Container) é a porta onde o software dentro do container está configurado para "ouvir"
 
 Desliga o container graciosamente.
+---
+```bash
+docker stop nome-do-container
+```
 
-
-- **`docker start nome-do-container`**
 
 Liga um container que estava parado (mantendo as alterações feitas nele).
+---
+```bash
+docker start nome-do-container
+```
 
-
-- **`docker restart nome-do-container`**
 
 Desliga e liga novamente.
+---
+```bash
+docker restart nome-do-container
+```
 
-
-- **`docker ps`**
 
 Lista os containers que estão rodando agora.
+---
+```bash
+docker ps
+```
 
-
-- **`docker ps -a`**
 
 Lista todos os containers (rodando e parados).
-
-Comandos de Limpeza (Descarte)
 ---
+```bash
+docker ps -a
+```
 
-- **`docker rm nome-do-container`**
+
+## **Comandos de Limpeza (Descarte)**
+
 
 Apaga um container (ele precisa estar parado).
+---
+```bash
+docker rm nome-do-container
+```
 
-
-- **`docker rmi nome-da-imagem`**
 
 Apaga uma imagem do seu disco.
-
-- **`docker system prune`**
-O "limpa tudo": apaga todos os containers parados e imagens sem uso de uma vez.
-
-Comandos de Rede e Comunicação 
 ---
+```bash
+docker rmi nome-da-imagem
+```
 
-- **`docker network create minha-rede`**
+
+O "limpa tudo": apaga todos os containers parados e imagens sem uso de uma vez.
+---
+```bash
+docker system prune
+```
+
+
+# **Comandos de Rede e Comunicação**
+---
 
 Criar uma rede 
+---
+```bash
+docker network create minha-rede
+```
 
-- **`docker run -d --name banco --network minha-rede mongo`**
 
 Rodar o banco de dados na rede
+---
+```bash
+docker run -d --name banco --network minha-rede mongo
+```
 
-- **`docker run -d --name site --network minha-rede meu-site-imagem`**
 
 Rodar o Site na mesma rede
+---
+```bash
+docker run -d --name site --network minha-rede meu-site-imagem
+```
 
-- **`docker network ls`**
 
 Listar todas as redes criadas
+---
+```bash
+docker network ls
+```
 
-- **`docker network inspect nome-da-rede`**
 
 Mostra detalhes da rede, incluindo quais containers estão nela e quais os IPs internos (caso você precise muito saber o IP).
-
-Comandos de Inspeção (O que está acontecendo lá dentro?)
 ---
-- **`docker logs -f nome-do-container`**
+```bash
+docker network inspect nome-da-rede
+```
+
+
+# **Comandos de Inspeção (O que está acontecendo lá dentro?)**
+---
 
 Mostra em tempo real o que o seu app está "printando" no console (ajuda muito a achar erros).
+---
+```bash
+docker logs -f nome-do-container
+```
 
-- **`docker exec -it nome-do-container sh`**
-(ou bash). Este comando "entra" no container. É como se você abrisse um terminal dentro daquela máquina isolada para navegar nas pastas.
+Este comando "entra" no container. É como se você abrisse um terminal dentro daquela máquina isolada para navegar nas pastas.
+---
+```bash
+docker exec -it nome-do-container sh
+```

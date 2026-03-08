@@ -149,34 +149,78 @@ Porque o GitHub Actions precisa acessar sua EC2 automaticamente sem você digita
 
 ## PASSO 3 — Adicionar chave pública na EC2
 
-No seu computador, execute: 
+Neste passo, vamos adicionar a chave pública na EC2. O objetivo é permitir que:
+
+**“Permita que quem possuir a chave privada correspondente possa entrar como `deploy-python`.”**
+
+Então, pra começar precisamos pegar a chave pública. No seu computador, execute: 
 
 ```powershell 
 PS C:\Users\irani> cat github-actions-python-ec2.pub
 ```
 
-Copie TODO o conteúdo que aparecer (vai começar com *ssh-rsa*). Depois, vá para sua EC2 e execute: 
+Após isso, a chave vai aparecer no terminal e é importante que você copie **TODO** o conteúdo que aparecer (vai começar com *ssh-rsa*). Após isso, guarde o conteúdo pois precisaremos dele daqui a pouco.
+
+Agora precisamos criar estrutura SSH no servidor. Precisamos criar a pasta obrigatória `/home/deploy-python/.ssh` (Sem essa pasta, o SSH simplesmente ignora autenticação por chave.) e abrir (ou criar) o arquivo `authorized_keys` nessa pasta (esse arquivo é necessário pois é onde ficam as chaves de permissão). O serviço SSH procura automaticamente por chaves autorizadas no caminho ~/.ssh/authorized_keys. Caso essa estrutura não exista, a autenticação por chave é ignorada. 
 
 ```bash 
+# criar a pasta '.ssh'
 ubuntu@ip-172-31-9-94:~$ sudo mkdir -p /home/deploy-python/.ssh
+
+# abrir (ou criar) arquivo 'authorized_keys'
 ubuntu@ip-172-31-9-94:~$ sudo nano /home/deploy-python/.ssh/authorized_keys
 ```
 
 Cole a chave pública e depois faça: 
 
-* CTRL + X
-* y 
-* ENTER
+* `CTRL + X`
+* `y` 
+* `ENTER`
 
 Agora devemos ajustar as permissões 
 
 ```bash 
+# Define dono correto. Evita acesso indevido.
 ubuntu@ip-172-31-9-94:~$ sudo chown -R deploy-python:deploy-python /home/deploy-python/.ssh
+
+# Protege pasta.Só dono acessa.
 ubuntu@ip-172-31-9-94:~$ sudo chmod 700 /home/deploy-python/.ssh
+
+# Protege chave. Impede modificação por terceiros.
 ubuntu@ip-172-31-9-94:~$ sudo chmod 600 /home/deploy-python/.ssh/authorized_keys
 ```
 
-## PASSO 4 - Configurar Secrets no GitHub   
+
+## PASSO 4 - Configurar Secrets no GitHub 
+
+Neste passo, vamos armazenar credenciais sensíveis de forma segura no GitHub.
+
+Os Secrets permitem que o GitHub Actions utilize informações confidenciais (como chaves SSH e tokens do Docker) sem expô-las no código do repositório.
+
+Quando o GitHub Actions executa um workflow, ele roda em uma máquina temporária chamada: `GitHub Runner`. Essa máquina:
+
+* Não conhece sua EC2
+* Não conhece sua senha
+* Não conhece seu Docker Hub
+* Não conhece suas chaves
+
+Então precisamos fornecer essas credenciais de forma segura. O GitHub fornece um mecanismo chamado: `Repository Secrets`
+
+Eles são:
+
+* Criptografados
+* Não aparecem nos logs
+* Não ficam no código
+* Só podem ser acessados pelo workflow
+
+**Por que não colocar isso direto no YAML?**
+
+Porque isso seria:
+
+* Extremamente inseguro
+* Ficaria visível no repositório
+* Poderia ser usado por qualquer pessoa
+* Violaria boas práticas DevOps
 
 Vá no seu repositório: 
 
@@ -186,13 +230,13 @@ Settings → Secrets and variables → Actions → New repository secret
 Crie os seguintes secrets:
 
 
-| Name                | Secret                            |
-|---------------------|-----------------------------------|
-| EC2_HOST            | 18.231.250.104                    |
-| EC2_USER            | deploy-python                     |
-| EC2_SSH_KEY         | `key`                             |
-| DOCKER_USERNAME     | iranhonorato (user github)        |
-| DOCKER_PASSWORD     | `token docker hub`                |
+| Name                | Secret                                       |
+|---------------------|----------------------------------------------|
+| EC2_HOST            | 18.231.250.104                               |
+| EC2_USER            | deploy-python                                |
+| EC2_SSH_KEY         | `key`                                        |
+| DOCKER_USERNAME     | Usuário do Docker Hub                        |
+| DOCKER_PASSWORD     | `Personal Access Token do Docker Hub`        |
 
 
 **key** 
@@ -207,7 +251,7 @@ PS C:\Users\irani> notepad github-actions-python-ec2
 Isso vai abrir o arquivo no Bloco de Notas. É importante que você copie TUDO, inclusive as linhas BEGIN e END, depois cole em Secret de EC2_SSH_KEY
 
 
-**token docker hub** 
+**Personal Access Token do Docker Hub** 
 ---
 
 Vá ao Docker Hub:

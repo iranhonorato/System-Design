@@ -1,56 +1,36 @@
 # Hands-On: Continuous Delivery/Deployment
 
-## Antes de começarmos, precisamos alinhas alguns pontos: 
+## Objetivo
 
-**1. Qual projeto vamos usar?**
-
-Seu projeto é:
-
-* Backend (Node, Java, Python, etc.)?
-* Frontend (React, Vue, etc.)?
-* Fullstack?
-* API REST?
-* Projeto estático?
-
-**2. Onde você quer fazer deploy?**
-
-* AWS EC2 **(Esse tutorial cobre o caso AWS EC2)**
-* AWS Elastic Beanstalk
-* Docker + EC2
-* Vercel / Render / Railway
-* Outro?
-
-**3. Arquitetura que vamos montar**
-
-Queremos que sempre que você fizer push na branch main, o GitHub:
+Configurar um pipeline de Continuous Delivery/Deployment para que, sempre que houver um git push na branch main, o sistema automaticamente:
 
 * Construa a imagem Docker
-* Envie para o Docker Hub
-* Conecte na sua EC2
-* Faça pull da nova imagem
-* Reinicie o container automaticamente
+* Envie a imagem para o Docker Hub
+* Conecte via SSH à EC2
+* Atualize o container em execução
+* Reinicie a aplicação
 
-Sem você precisar acessar manualmente a EC2. Logo, a visão geral do fluxo vai ficar mais ou menos assim
-
-```Plain
+```Plain 
 git push main
-     ↓
-GitHub Actions roda pipeline
-     ↓
-Build do projeto
-     ↓
+        ↓
+GitHub Actions executa pipeline
+        ↓
+Build da imagem Docker
+        ↓
+Push para Docker Hub
+        ↓
 SSH automático na EC2
-     ↓
-Atualiza código
-     ↓
-Reinicia aplicação
+        ↓
+Pull da nova imagem
+        ↓
+Reinício do container
 ```
 
-Isso é Continuous Delivery real. Agora vamos construir isso passo a passo.
+Esse fluxo caracteriza Continuous Delivery real em ambiente cloud.
 
 ## PASSO 1 — Criar usuário deploy na EC2 (boa prática)
 
-Você pode usar ubuntu mas criar um usuário dedicado é uma boa prática de segurança. Eis os motivos principais: 
+Embora seja possível utilizar o usuário padrão ubuntu, criar um usuário específico para automação é uma boa prática de segurança.
 
 * Separação de responsabilidades: Usuário humano (`ubuntu`) e Usuário de automação (`deploy-python`)
 * Cada usuário deve ter apenas as permissões necessárias. Se o GitHub Actions for comprometido, o atacante só terá acesso ao usuário de deploy, não ao usuário principal.
@@ -110,6 +90,10 @@ Se listar os containers sem erro de permissão, está correto. Mas se aparecer e
 
 ## PASSO 2 — Criar chave SSH no seu computador (NÃO na EC2)
 
+o GitHub Actions precisa acessar sua EC2 automaticamente sem você digitar senha e de forma segura. Mas o GitHub é um servidor remoto, ou seja, ele não pode pedir senha interativamente, guardar senha em texto puro e usar login manual. Então, por conta disso usamos autenticação por chave SSH.
+
+**Gerar par de chaves**
+
 No seu computador local (Windows PowerShell ou Git Bash):
 
 ```bash 
@@ -139,13 +123,10 @@ PS C:\Users\irani>
 
 Com o comando acima nós criamos um par de chaves criptográficas SSH:
 
-* github-actions-ec2
-* github-actions-ec2.pub
+* github-actions-ec2 → chave privada
+* github-actions-ec2.pub → chave pública
 
-**Mas por que precisamos disso?**
-
-Porque o GitHub Actions precisa acessar sua EC2 automaticamente sem você digitar senha e de forma segura. Mas o GitHub é um servidor remoto, ou seja, ele não pode pedir senha interativamente, guardar senha em texto puro e usar login manual. Então, por conta dissom usamos autenticação por chave SSH.
-
+**A chave privada nunca deve ser enviada ao servidor.**
 
 ## PASSO 3 — Adicionar chave pública na EC2
 

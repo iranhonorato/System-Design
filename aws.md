@@ -1,235 +1,356 @@
-# Guia Completo: Como Utilizar uma Máquina Virtual na AWS (EC2)
+# Máquinas Virtuais na AWS (EC2)
 
-Este guia descreve passo a passo como acessar e utilizar uma máquina virtual na AWS, explicando os conceitos envolvidos e os comandos utilizados.
+## 1. O que é o EC2?
 
-## 1. O que é uma Máquina Virtual na AWS?
+O **EC2 (Elastic Compute Cloud)** é o serviço da AWS que fornece servidores virtuais na nuvem. Em vez de comprar e manter hardware físico, você aluga capacidade computacional por hora ou segundo, configura o tipo de máquina que precisa e tem acesso a um servidor Linux ou Windows rodando em um data center da Amazon.
 
-Na AWS, uma máquina virtual é chamada de Instância EC2 (Elastic Compute Cloud).
+**"Elastic"** no nome não é por acaso — você pode aumentar ou diminuir a capacidade conforme a demanda, sem precisar comprar hardware.
 
-Ela é:
+### O que você pode fazer com uma instância EC2:
+- Hospedar aplicações web e APIs
+- Rodar bancos de dados
+- Executar pipelines de processamento de dados
+- Servir de base para containers Docker
+- Fazer deploy de aplicações em produção
 
-* Um computador rodando em um data center da Amazon
-* Acessível remotamente pela internet
-* Totalmente configurável (CPU, memória, disco, sistema operacional)
-* Usada para hospedar aplicações, bancos de dados, APIs, sites, etc.
+### Informações da instância usada neste guia:
+```
+Instância: aluno_13
+DNS IPv4:  ec2-18-231-250-104.sa-east-1.compute.amazonaws.com
+IP público: 18.231.250.104
+Região:     sa-east-1 (São Paulo)
+```
 
-**Observação:** Informações da minha máquina AWS
 ---
-```txt
-Instância: 
-aluno_13
 
-DNS IPV4:
-http://ec2-18-231-250-104.sa-east-1.compute.amazonaws.com/
+## 2. Conceitos Fundamentais
 
-IP: 
-18.231.250.104 
+### 2.1 SSH e a Chave `.pem`
+
+Para acessar um servidor Linux remotamente com segurança, usamos o protocolo **SSH (Secure Shell)** — uma conexão criptografada que garante que ninguém intercepte seus comandos.
+
+Em vez de usar senha (que poderia ser roubada ou adivinhada), o EC2 usa **autenticação por chave criptográfica**:
+
+```
+┌─────────────────────────────────────────────────────┐
+│              PAR DE CHAVES SSH                       │
+│                                                      │
+│  Chave Privada (.pem)    Chave Pública               │
+│  ┌──────────────────┐    ┌──────────────────┐        │
+│  │  Fica com você   │    │  Fica no servidor │        │
+│  │  NUNCA compartilhe│   │  (authorized_keys)│        │
+│  └──────────────────┘    └──────────────────┘        │
+│                                                      │
+│  Como uma fechadura: a chave pública é a fechadura   │
+│  (qualquer um pode ver), a privada é a chave         │
+│  (só você tem).                                      │
+└─────────────────────────────────────────────────────┘
 ```
 
-## 2. Conceitos Fundamentais Antes da Conexão
+A AWS gera o par de chaves no momento da criação da instância e fornece o arquivo `.pem` (chave privada) para download — **apenas uma vez**. Se você perder esse arquivo, perderá o acesso à instância.
 
-Antes de acessar a máquina, é importante entender alguns conceitos:
+### 2.2 IP Público vs. DNS Público
 
-### 2.1 Chave SSH (.pem)
+Sua instância EC2 tem dois endereços que apontam para a mesma máquina:
 
-* Arquivo fornecido na criação da instância
-* Funciona como uma chave privada digital
-* Substitui o uso de senha
-* Deve ser protegida
+- **IP Público:** `18.231.250.104` — endereço numérico direto
+- **DNS Público:** `ec2-18-231-250-104.sa-east-1.compute.amazonaws.com` — nome legível
 
-Exemplo: 
+Ambos funcionam para conexão SSH e para acessar serviços web. O DNS é mais descritivo e inclui a região (`sa-east-1` = São Paulo).
 
-```bash 
-chave-linux.pem
-```
+> **Atenção:** em instâncias EC2 sem Elastic IP, o IP público **muda toda vez que a instância é reiniciada**. Para produção, associe um Elastic IP (um IP fixo) à sua instância.
 
-### 2.2 IP Público e DNS
+### 2.3 Usuário Padrão por Sistema Operacional
 
-* IP público: 18.231.250.104
-* DNS público: ec2-18-231-250-104.sa-east-1.compute.amazonaws.com
-
-Ambos apontam para sua instância na AWS.
-
-
-### 2.3 Usuário padrão
-
-Depende do sistema operacional escolhido:
+Cada imagem de SO no EC2 tem um usuário padrão pré-configurado:
 
 | Sistema Operacional | Usuário Padrão |
-|----------------------|----------------|
-| Ubuntu               | ubuntu         |
-| Amazon Linux         | ec2-user       |
-| Debian               | admin          |
+|---|---|
+| Ubuntu | `ubuntu` |
+| Amazon Linux 2 | `ec2-user` |
+| Debian | `admin` |
+| CentOS | `centos` |
+| Red Hat (RHEL) | `ec2-user` |
 
-No nosso caso: 
+Neste guia usamos **Ubuntu** → usuário `ubuntu`.
 
-```bash 
-ubuntu
+### 2.4 Security Groups (Firewall da AWS)
+
+Um **Security Group** é um firewall virtual que controla o tráfego de entrada e saída da sua instância. Por padrão, todo tráfego de entrada é bloqueado — você precisa abrir explicitamente as portas necessárias.
+
+Portas comuns:
+
+| Porta | Protocolo | Uso |
+|---|---|---|
+| 22 | TCP | SSH (acesso remoto) |
+| 80 | TCP | HTTP (sites) |
+| 443 | TCP | HTTPS (sites seguros) |
+| 5432 | TCP | PostgreSQL |
+| 3306 | TCP | MySQL |
+
+---
+
+## 3. Conectando via SSH
+
+### 3.1 Ajustando permissões da chave (Windows PowerShell)
+
+Na primeira vez, o Windows pode reclamar que a chave `.pem` tem permissões muito abertas. Se necessário:
+
+```powershell
+# Verificar se o arquivo .pem está acessível
+dir chave-linux.pem
 ```
 
-## 3. Acessando a Máquina via SSH (Windows PowerShell)
+### 3.2 Navegando até a pasta da chave
 
-### 3.1 Navegando até a pasta da chave
-
-Você precisa estar na pasta onde está o arquivo ``.pem``.
-
-```PowerShell 
-PS C:\Users\irani> cd desktop
-PS C:\Users\irani\desktop> cd "Insper - CComp"
-PS C:\Users\irani\desktop\Insper - CComp> cd "Projeto de Software e Gestão Ágil"
+```powershell
+cd C:\Users\seu-usuario\Downloads
+# ou onde você salvou o arquivo .pem
 ```
 
-### 3.2 Conectando via SSH
+### 3.3 Conectando à instância
 
-```PowerShell 
-PS C:\Users\irani\desktop\Insper - CComp\Projeto de Software e Gestão Ágil> ssh -i "chave-linux.pem" ubuntu@18.231.250.104
+```powershell
+ssh -i "chave-linux.pem" ubuntu@18.231.250.104
 ```
 
-Explicando o comando acima: 
+Anatomia do comando:
 
-| Parte               | Significado                             |
-|---------------------|------------------------------------------|
-| ssh                 | Protocolo de conexão remota segura       |
-| -i                  | Indica o arquivo de chave                |
-| chave-linux.pem     | Sua chave privada                       |
-| ubuntu              | Usuário remoto                          |
-| 18.231.250.104      | IP da instância                         |
+| Parte | Significado |
+|---|---|
+| `ssh` | Protocolo de conexão segura |
+| `-i "chave-linux.pem"` | Usa este arquivo como chave de identidade |
+| `ubuntu` | Usuário no servidor remoto |
+| `18.231.250.104` | Endereço IP da instância |
 
-
-### 3.3 Primeira Conexão (Authenticity)
-
-Na primeira vez, o sistema perguntará:
-
-```Plain text 
-Are you sure you want to continue connecting (yes/no)?
+**Alternativa com DNS (equivalente):**
+```powershell
+ssh -i "chave-linux.pem" ubuntu@ec2-18-231-250-104.sa-east-1.compute.amazonaws.com
 ```
 
-Digite:
+### 3.4 Primeira conexão: verificação de identidade
 
+Na primeira vez conectando, o SSH não conhece o servidor e pergunta:
 
-```Plain text 
-yes
+```
+The authenticity of host '18.231.250.104' can't be established.
+ECDSA key fingerprint is SHA256:xxxxxxxxxxx.
+Are you sure you want to continue connecting (yes/no/[fingerprint])?
 ```
 
-Isso:
+Digite `yes`. O SSH salva a "impressão digital" do servidor no arquivo `~/.ssh/known_hosts`. Nas próximas conexões, ele verifica automaticamente — se a impressão mudar (o que pode indicar um ataque), o SSH alerta.
 
-* Salva a impressão digital do servidor
-* Evita ataques de "man-in-the-middle"
-* Adiciona o host ao arquivo known_hosts
+### 3.5 Conexão bem-sucedida
 
-## 4. O Que Mudou Após a Conexão?
-
-Antes:
-
-```PowerShell
-PS C:\Users\irani>
+Seu terminal muda de:
 ```
-
-Depois:
-
-```PoowerShell
+PS C:\Users\seu-usuario>
+```
+Para:
+```
 ubuntu@ip-172-31-9-94:~$
 ```
 
-Isso significa que:
+Você agora está executando comandos em São Paulo, no servidor da AWS. Tudo que você digitar roda lá — não no seu computador.
 
-* Você saiu do seu computador
-* Agora está executando comandos na máquina da AWS
-* Tudo digitado será executado na nuvem
+---
 
-## 5. Entendendo as Informações Iniciais do Sistema
+## 4. Entendendo o Prompt e as Informações do Sistema
 
-Ao conectar, o sistema mostra informações como:
-
-```Plain text
-System load: 0.0
-Usage of /: 28%
-50 updates can be applied
+```
+ubuntu@ip-172-31-9-94:~$
+  │        │          │ └── $ indica usuário comum (# seria root)
+  │        │          └──── ~ é o diretório home (/home/ubuntu)
+  │        └─────────────── ip-172-31-9-94 é o hostname interno da instância
+  └──────────────────────── nome do usuário
 ```
 
-O que isso significa?
+Ao conectar, o sistema exibe informações úteis:
 
-| Informação          | Significado                             |
-|---------------------|-----------------------------------------|
-| System load 0.0     | Máquina ociosa                          |
-| Usage of / 28%      | 28% do disco usado                      |
-| 50 updates          | Atualizações pendentes                  |
+```
+System information as of Mon Mar 30 14:22:18 UTC 2026
 
+System load:  0.08               Processes:             98
+Usage of /:   28.4% of 7.69GB   Users logged in:       0
+Memory usage: 18%                IPv4 address for eth0: 172.31.9.94
+Swap usage:   0%
+```
 
-## 6. Comandos Básicos no Linux (Após Conectar)
+| Campo | O que significa |
+|---|---|
+| System load | Uso médio da CPU nos últimos minutos (0.08 = praticamente ociosa) |
+| Usage of / | Percentual do disco usado |
+| Memory usage | RAM utilizada |
+| IPv4 eth0 | IP interno da instância (privado, dentro da AWS) |
 
-**Ver arquivos na pasta atual**
+---
+
+## 5. Comandos Essenciais no Linux
+
+### Navegação e arquivos
 
 ```bash
+# Ver arquivos na pasta atual
 ls
-```
 
-**Ver diretório atual**
+# Ver com detalhes (permissões, tamanho, data)
+ls -la
 
-```bash
+# Diretório atual
 pwd
+
+# Entrar em uma pasta
+cd nome-da-pasta
+
+# Voltar uma pasta
+cd ..
+
+# Ir para o diretório home
+cd ~
+
+# Criar pasta
+mkdir nome-da-pasta
+
+# Ver conteúdo de um arquivo
+cat arquivo.txt
+
+# Ver as últimas linhas de um arquivo (útil para logs)
+tail -f arquivo.log
 ```
 
-**Entrar em uma pasta**
+### Sistema
 
 ```bash
-cd nome_da_pasta
-```
-
-**Atualizar o sistema (recomendado)**
-
-```bash
+# Atualizar lista de pacotes disponíveis
 sudo apt update
+
+# Instalar atualizações pendentes
 sudo apt upgrade -y
+
+# Instalar um pacote
+sudo apt install nome-do-pacote -y
+
+# Ver processos em execução
+ps aux
+
+# Ver IP público da instância
+curl ifconfig.me
+
+# Ver uso de disco
+df -h
+
+# Ver uso de memória
+free -h
 ```
 
-**Ver IP da máquina**
+### Gerenciamento de serviços
 
 ```bash
-curl ifconfig.me
+# Ver status de um serviço
+sudo systemctl status nginx
+
+# Iniciar um serviço
+sudo systemctl start nginx
+
+# Parar um serviço
+sudo systemctl stop nginx
+
+# Reiniciar um serviço
+sudo systemctl restart nginx
+
+# Fazer o serviço iniciar automaticamente na inicialização
+sudo systemctl enable nginx
 ```
 
-## 7. Fluxo Geral de Uso de uma VM na AWS
-
-* Criar instância EC2
-* Baixar chave .pem
-* Configurar Security Group (porta 22 aberta para SSH)
-* Conectar via SSH
-* Instalar dependências (Docker, Node, Java, etc.)
-* Deploy da aplicação
-* Acessar via navegador usando IP público
-
-## **OBSERVAÇÃO: SEGURANÇA**
-
-**Sempre:**
----
-* Proteja o arquivo .pem
-* Restrinja acesso SSH no Security Group
-* Use firewall
-* Atualize o sistema
-
-**Nunca:**
 ---
 
-* Compartilhe sua chave privada
-* Deixe porta 22 aberta para 0.0.0.0/0 em produção
+## 6. Fluxo Típico de Uso do EC2
 
+```
+1. CRIAR INSTÂNCIA
+   └── Escolher AMI (Ubuntu, Amazon Linux, etc.)
+   └── Escolher tipo (t3.micro, t3.medium, etc.)
+   └── Configurar Security Group (abrir portas necessárias)
+   └── Criar/selecionar par de chaves
 
-## 9. Estrutura Conceitual da Arquitetura
+2. CONECTAR VIA SSH
+   └── ssh -i "chave.pem" ubuntu@IP
 
-```Plain text
-Seu Notebook (Windows)
+3. PREPARAR O AMBIENTE
+   └── sudo apt update && sudo apt upgrade -y
+   └── Instalar Docker, Node, Python, etc.
+
+4. DEPLOY DA APLICAÇÃO
+   └── Clonar repositório (git clone)
+   └── Configurar variáveis de ambiente
+   └── Subir containers (docker run / docker compose up)
+
+5. ACESSAR A APLICAÇÃO
+   └── http://IP-público:porta
+```
+
+---
+
+## 7. Tipos de Instância EC2
+
+A AWS oferece centenas de tipos de instância. Os mais comuns para aprendizado e projetos pequenos são da família **t** (burstable — podem usar mais CPU em picos):
+
+| Tipo | vCPUs | RAM | Uso típico |
+|---|---|---|---|
+| t3.nano | 2 | 0.5 GB | Testes, demos |
+| t3.micro | 2 | 1 GB | Free tier, dev |
+| t3.small | 2 | 2 GB | Apps pequenas |
+| t3.medium | 2 | 4 GB | Apps de médio porte |
+| t3.large | 2 | 8 GB | Apps com mais memória |
+
+> **Free Tier:** a AWS oferece 750 horas/mês de t3.micro (ou t2.micro) gratuitamente para novos usuários durante 12 meses. É suficiente para manter uma instância rodando continuamente.
+
+---
+
+## 8. Boas Práticas de Segurança
+
+**Proteja o arquivo .pem:**
+- Nunca compartilhe ou cometa em repositórios
+- Adicione ao `.gitignore`
+- Faça backup em local seguro
+
+**Configure o Security Group corretamente:**
+```
+❌ ERRADO: Abrir porta 22 para 0.0.0.0/0 (qualquer IP pode tentar conectar)
+✅ CERTO:  Abrir porta 22 apenas para o seu IP ou range corporativo
+```
+
+**Mantenha o sistema atualizado:**
+```bash
+# Rodar regularmente
+sudo apt update && sudo apt upgrade -y
+```
+
+**Use usuários específicos por função:**
+- `ubuntu`: acesso humano/administrativo
+- `deploy`: acesso para automações e CI/CD (veremos no guia de CD)
+
+**Não use a conta root diretamente:** o prefixo `sudo` já concede privilégios temporários quando necessário.
+
+---
+
+## 9. Arquitetura de Conexão
+
+```
+Seu Computador (Windows/Mac/Linux)
         │
-        │ SSH (chave privada)
+        │  SSH com chave privada (.pem)
+        │  Porta 22, tráfego criptografado
         ▼
-Internet (canal criptografado)
-        |
+Internet
+        │
         ▼
-AWS Data Center
-        |
+AWS Security Group
+        │  (filtra: apenas porta 22 do seu IP)
         ▼
-Instância EC2 (Ubuntu Linux)
-        |
+Instância EC2 (Ubuntu)
+        │  IP interno: 172.31.9.94
+        │  IP externo: 18.231.250.104
         ▼
-Aplicações / APIs / Banco de Dados
+Aplicação / Docker / Banco de Dados
 ```

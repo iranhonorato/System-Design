@@ -1,306 +1,310 @@
-# Hands-On: Continuous Delivery/Deployment
+# Hands-On: Continuous Delivery/Deployment com GitHub Actions
 
 ## Objetivo
 
-Configurar um pipeline de Continuous Delivery/Deployment para que, sempre que houver um git push na branch main, o sistema automaticamente:
+Configurar um pipeline de CD completo que, a cada `git push` na branch `main`, execute automaticamente:
 
-* Construa a imagem Docker
-* Envie a imagem para o Docker Hub
-* Conecte via SSH à EC2
-* Atualize o container em execução
-* Reinicie a aplicação
+1. Testes e validação do código
+2. Build da imagem Docker
+3. Push da imagem para o Docker Hub
+4. Conexão SSH à EC2
+5. Atualização do container em produção
 
-```Plain 
-git push main
+```
+git push → main
         ↓
-GitHub Actions executa pipeline
+GitHub Actions
         ↓
-Build da imagem Docker
+✅ Testes passam
         ↓
-Push para Docker Hub
+🐳 Build da imagem Docker
         ↓
-SSH automático na EC2
+📤 Push para Docker Hub
         ↓
-Pull da nova imagem
+🔑 SSH automático na EC2
         ↓
-Reinício do container
+⬇️  Pull da nova imagem
+        ↓
+♻️  Reinício do container
+        ↓
+🚀 Aplicação atualizada em produção
 ```
 
-Esse fluxo caracteriza Continuous Delivery real em ambiente cloud.
+---
 
-## PASSO 1 — Criar usuário deploy na EC2 (boa prática)
+## Por que esse fluxo é necessário?
 
-Embora seja possível utilizar o usuário padrão ubuntu, criar um usuário específico para automação é uma boa prática de segurança.
+O GitHub Actions executa cada pipeline em uma **máquina virtual temporária** chamada GitHub Runner. Essa máquina:
+- É criada do zero a cada execução
+- Não tem acesso à sua EC2 por padrão
+- Não conhece suas senhas ou tokens
+- É destruída ao final do pipeline
 
-* Separação de responsabilidades: Usuário humano (`ubuntu`) e Usuário de automação (`deploy-python`)
-* Cada usuário deve ter apenas as permissões necessárias. Se o GitHub Actions for comprometido, o atacante só terá acesso ao usuário de deploy, não ao usuário principal.
-* Organização profissional
+Por isso, precisamos fornecer todas as credenciais necessárias de forma segura — e é exatamente isso que os próximos passos configuram.
 
-Chega de papo, vamos lá.Na EC2, vamos criar o usuário: 
+---
 
-```bash 
-ubuntu@ip-172-31-9-94:~$ sudo adduser deploy-python  # deploy-python é o nome que eu escolhi pro user
-info: Adding user `deploy-python' ...
-info: Selecting UID/GID from range 1000 to 59999 ...
-info: Adding new group `deploy-python' (1001) ...
-info: Adding new user `deploy-python' (1001) with group `deploy-python (1001)' ...
-info: Creating home directory `/home/deploy-python' ...
-info: Copying files from `/etc/skel' ...
-New password:
-Retype new password:
-passwd: password updated successfully
-Changing the user information for deploy-python
-Enter the new value, or press ENTER for the default
-        Full Name []:
-        Room Number []:
-        Work Phone []:
-        Home Phone []:
-        Other []:
-Is the information correct? [Y/n] y
-info: Adding new user `deploy-python' to supplemental / extra groups `users' ...
-info: Adding user `deploy-python' to group `users' ...
-ubuntu@ip-172-31-9-94:~$
-```
+## PASSO 1 — Criar usuário de deploy na EC2
 
-Depois que o usuário for criado, execute:
+### Por que criar um usuário separado?
 
-```bash 
-ubuntu@ip-172-31-9-94:~$ sudo usermod -aG docker deploy-python
-ubuntu@ip-172-31-9-94:~$
-```
+Usar o usuário `ubuntu` para automações é uma má prática de segurança. O princípio do **mínimo privilégio** diz que cada agente (humano ou automatizado) deve ter apenas as permissões estritamente necessárias.
 
-O que esse comando faz: 
+| Aspecto | Sem separação | Com separação |
+|---|---|---|
+| **Risco** | GitHub Actions comprometido = acesso total ao servidor | GitHub Actions comprometido = acesso limitado ao deploy |
+| **Rastreabilidade** | Impossível distinguir ação humana de automação nos logs | Logs mostram claramente quem fez o quê |
+| **Controle** | Revogar acesso derruba humanos e automações | Revoga automação sem afetar acesso humano |
 
-| Comando             | Significado                       |
-|---------------------|-----------------------------------|
-| usermod             | modifica usuário                  |
-| -aG docker          | adiciona ao grupo docker          |
-| deploy-python       | usuário                           |
+### Criando o usuário
 
-
-Ou seja, permite que o usuário deploy-python execute docker sem sudo. Agora, após feito tudo isso, vamos testar se funcionou: 
+Conecte-se à EC2 com seu usuário `ubuntu` e execute:
 
 ```bash
-ubuntu@ip-172-31-9-94:~$ su - deploy-python
-Password:
-deploy-python@ip-172-31-9-94:~$ docker ps
+# Criar o usuário de deploy
+sudo adduser deploy-python
 ```
 
-Se listar os containers sem erro de permissão, está correto. Mas se aparecer erro de permissão, saia e faça logout/login novamente ou reinicie a sessão SSH.
+O sistema pedirá uma senha e algumas informações (pode pressionar Enter para deixar em branco exceto a senha). Após criar, adicione ao grupo docker:
 
-## PASSO 2 — Criar chave SSH no seu computador (NÃO na EC2)
-
-o GitHub Actions precisa acessar sua EC2 automaticamente sem você digitar senha e de forma segura. Mas o GitHub é um servidor remoto, ou seja, ele não pode pedir senha interativamente, guardar senha em texto puro e usar login manual. Então, por conta disso usamos autenticação por chave SSH.
-
-**Gerar par de chaves**
-
-No seu computador local (Windows PowerShell ou Git Bash):
-
-```bash 
-PS C:\Users\irani> ssh-keygen -t rsa -b 4096 -C "github-actions-deploy"
-Generating public/private rsa key pair. 
-Enter file in which to save the key (C:\Users\irani/.ssh/id_rsa): github-actions-python-ec2 # (nome que você quiser)
-Enter passphrase (empty for no passphrase):
-Enter same passphrase again:
-Your identification has been saved in github-actions-python-ec2
-Your public key has been saved in github-actions-python-ec2.pub
-The key fingerprint is:
-SHA256:q4IYjFn+EicUUQyPIbSy1CWV6gAA/91NEIlQf+5OH1s github-actions-deploy
-The key's randomart image is:
-+---[RSA 4096]----+
-|B.+*+=o.oo       |
-|.o+++.....       |
-|ooooo   . o      |
-|oooo . . =       |
-|+=o . . S o      |
-|+.+..    o       |
-| o *    . o . E  |
-|. o o  . o . +   |
-|   . ..   . o    |
-+----[SHA256]-----+
-PS C:\Users\irani>
+```bash
+# Permitir que o usuário execute docker sem sudo
+sudo usermod -aG docker deploy-python
 ```
 
-Com o comando acima nós criamos um par de chaves criptográficas SSH:
+**Por que o grupo docker?** Por padrão, apenas o root pode executar comandos Docker. Adicionar um usuário ao grupo `docker` concede essa permissão sem precisar de `sudo`.
 
-* github-actions-ec2 → chave privada
-* github-actions-ec2.pub → chave pública
+### Verificando
 
-**A chave privada nunca deve ser enviada ao servidor.**
+```bash
+# Mudar para o novo usuário
+su - deploy-python
 
-## PASSO 3 — Adicionar chave pública na EC2
-
-Neste passo, vamos adicionar a chave pública na EC2. O objetivo é permitir que:
-
-**“Permita que quem possuir a chave privada correspondente possa entrar como `deploy-python`.”**
-
-Então, pra começar precisamos pegar a chave pública. No seu computador, execute: 
-
-```powershell 
-PS C:\Users\irani> cat github-actions-python-ec2.pub
+# Testar acesso ao Docker
+docker ps
 ```
 
-Após isso, a chave vai aparecer no terminal e é importante que você copie **TODO** o conteúdo que aparecer (vai começar com *ssh-rsa*). Após isso, guarde o conteúdo pois precisaremos dele daqui a pouco.
+Se listar containers sem erro, está configurado corretamente. Se aparecer "permission denied", faça logout e login novamente para que o grupo seja aplicado.
 
-Agora precisamos criar estrutura SSH no servidor. Precisamos criar a pasta obrigatória `/home/deploy-python/.ssh` (Sem essa pasta, o SSH simplesmente ignora autenticação por chave.) e abrir (ou criar) o arquivo `authorized_keys` nessa pasta (esse arquivo é necessário pois é onde ficam as chaves de permissão). O serviço SSH procura automaticamente por chaves autorizadas no caminho ~/.ssh/authorized_keys. Caso essa estrutura não exista, a autenticação por chave é ignorada. 
+---
 
-```bash 
-# criar a pasta '.ssh'
-ubuntu@ip-172-31-9-94:~$ sudo mkdir -p /home/deploy-python/.ssh
+## PASSO 2 — Gerar o par de chaves SSH para o GitHub Actions
 
-# abrir (ou criar) arquivo 'authorized_keys'
-ubuntu@ip-172-31-9-94:~$ sudo nano /home/deploy-python/.ssh/authorized_keys
+### Como funciona a autenticação automática
+
+O GitHub Actions precisa conectar à EC2 **sem interação humana** — não há ninguém para digitar uma senha. A solução é autenticação por chave SSH:
+
+1. Você gera um par de chaves (pública + privada)
+2. A **chave pública** vai para a EC2 (autoriza conexões)
+3. A **chave privada** vai para os Secrets do GitHub (permite que o Actions se autentique)
+
+**Execute no seu computador** (não na EC2):
+
+```bash
+# Gerar par de chaves RSA de 4096 bits
+ssh-keygen -t rsa -b 4096 -C "github-actions-deploy"
 ```
 
-Cole a chave pública e depois faça: 
-
-* `CTRL + X`
-* `y` 
-* `ENTER`
-
-Agora devemos ajustar as permissões 
-
-```bash 
-# Define dono correto. Evita acesso indevido.
-ubuntu@ip-172-31-9-94:~$ sudo chown -R deploy-python:deploy-python /home/deploy-python/.ssh
-
-# Protege pasta.Só dono acessa.
-ubuntu@ip-172-31-9-94:~$ sudo chmod 700 /home/deploy-python/.ssh
-
-# Protege chave. Impede modificação por terceiros.
-ubuntu@ip-172-31-9-94:~$ sudo chmod 600 /home/deploy-python/.ssh/authorized_keys
+Quando perguntar o nome do arquivo, escolha algo descritivo:
+```
+Enter file in which to save the key: github-actions-python-ec2
 ```
 
+Deixe a passphrase em branco (pressione Enter duas vezes) — o GitHub Actions não consegue digitar senhas interativamente.
 
-## PASSO 4 - Configurar Secrets no GitHub 
+Isso cria dois arquivos:
+- `github-actions-python-ec2` → **chave privada** (vai para o GitHub Secrets)
+- `github-actions-python-ec2.pub` → **chave pública** (vai para a EC2)
 
-Neste passo, vamos armazenar credenciais sensíveis de forma segura no GitHub.
+> **Regra de ouro:** a chave privada nunca deve sair do seu computador, exceto para ir para os Secrets criptografados do GitHub. Nunca a comite, nunca a compartilhe por email ou chat.
 
-Os Secrets permitem que o GitHub Actions utilize informações confidenciais (como chaves SSH e tokens do Docker) sem expô-las no código do repositório.
+---
 
-Quando o GitHub Actions executa um workflow, ele roda em uma máquina temporária chamada: `GitHub Runner`. Essa máquina:
+## PASSO 3 — Instalar a chave pública na EC2
 
-* Não conhece sua EC2
-* Não conhece sua senha
-* Não conhece seu Docker Hub
-* Não conhece suas chaves
+O SSH usa um mecanismo simples: o servidor só aceita conexões de quem tem a chave privada correspondente a uma chave pública listada em `~/.ssh/authorized_keys`.
 
-Então precisamos fornecer essas credenciais de forma segura. O GitHub fornece um mecanismo chamado: `Repository Secrets`
+### Obtendo a chave pública
 
-Eles são:
+No seu computador:
+```bash
+cat github-actions-python-ec2.pub
+```
 
-* Criptografados
-* Não aparecem nos logs
-* Não ficam no código
-* Só podem ser acessados pelo workflow
+Copie **todo** o conteúdo (começa com `ssh-rsa` e termina com `github-actions-deploy`).
 
-**Por que não colocar isso direto no YAML?**
+### Instalando na EC2
 
-Porque isso seria:
+Conecte-se à EC2 com seu usuário `ubuntu` e:
 
-* Extremamente inseguro
-* Ficaria visível no repositório
-* Poderia ser usado por qualquer pessoa
-* Violaria boas práticas DevOps
+```bash
+# Criar a estrutura de diretórios SSH para o usuário deploy-python
+sudo mkdir -p /home/deploy-python/.ssh
 
-Vá no seu repositório: 
+# Abrir (ou criar) o arquivo de chaves autorizadas
+sudo nano /home/deploy-python/.ssh/authorized_keys
+```
 
-```Plain 
+Cole a chave pública, salve (`CTRL+X`, `Y`, `Enter`).
+
+### Ajustando permissões (crítico)
+
+O SSH é extremamente rigoroso com permissões. Se as permissões estiverem erradas, **a autenticação por chave é silenciosamente ignorada**:
+
+```bash
+# Definir o dono correto dos arquivos
+sudo chown -R deploy-python:deploy-python /home/deploy-python/.ssh
+
+# A pasta .ssh deve ser acessível apenas pelo dono (700 = rwx------)
+sudo chmod 700 /home/deploy-python/.ssh
+
+# O arquivo de chaves deve ser legível apenas pelo dono (600 = rw-------)
+sudo chmod 600 /home/deploy-python/.ssh/authorized_keys
+```
+
+### Testando a conexão
+
+No seu computador:
+```bash
+ssh -i github-actions-python-ec2 deploy-python@18.231.250.104
+```
+
+Se conectar sem pedir senha, está funcionando. Esse é exatamente o que o GitHub Actions fará.
+
+---
+
+## PASSO 4 — Configurar Secrets no GitHub
+
+### O que são GitHub Secrets?
+
+Secrets são variáveis criptografadas armazenadas no GitHub que ficam disponíveis para os workflows, mas que:
+- Não aparecem nos logs (são mascaradas automaticamente)
+- Não são visíveis no código do repositório
+- Só podem ser acessadas pelos workflows do próprio repositório
+
+**Por que não colocar direto no arquivo YAML?**
+
+```yaml
+# ❌ NUNCA FAÇA ISSO:
+- name: Deploy
+  with:
+    host: 18.231.250.104
+    password: minha-senha-super-secreta   # visível para qualquer um!
+```
+
+Qualquer pessoa com acesso ao repositório (ou que clonar) teria suas credenciais. Em repositórios públicos, seria ainda pior — o mundo inteiro veria.
+
+### Como adicionar Secrets
+
+No seu repositório GitHub:
+```
 Settings → Secrets and variables → Actions → New repository secret
 ```
-Crie os seguintes secrets:
 
+Crie cada um dos seguintes secrets:
 
-| Name                | Secret                                       |
-|---------------------|----------------------------------------------|
-| EC2_HOST            | 18.231.250.104                               |
-| EC2_USER            | deploy-python                                |
-| EC2_SSH_KEY         | `key`                                        |
-| DOCKER_USERNAME     | Usuário do Docker Hub                        |
-| DOCKER_PASSWORD     | `Personal Access Token do Docker Hub`        |
+| Name | Valor | Como obter |
+|---|---|---|
+| `EC2_HOST` | `18.231.250.104` | IP da sua instância EC2 |
+| `EC2_USER` | `deploy-python` | Usuário criado no Passo 1 |
+| `EC2_SSH_KEY` | Conteúdo da chave privada | Ver abaixo |
+| `DOCKER_USERNAME` | Seu usuário do Docker Hub | Sua conta no hub.docker.com |
+| `DOCKER_PASSWORD` | Personal Access Token | Ver abaixo |
 
+### Obtendo o valor de `EC2_SSH_KEY`
 
-**key** 
----
-
-No PowerShell, digite: 
-
-```PowerShell
-PS C:\Users\irani> notepad github-actions-python-ec2
+A chave privada é um arquivo de texto. No Windows:
+```powershell
+notepad github-actions-python-ec2
 ```
 
-Isso vai abrir o arquivo no Bloco de Notas. É importante que você copie TUDO, inclusive as linhas BEGIN e END, depois cole em Secret de EC2_SSH_KEY
-
-
-**Personal Access Token do Docker Hub** 
----
-
-Vá ao Docker Hub:
-
-```Plain
-Busque por Settings 
-     ↓
-Vá a Personal access tokens
-     ↓
-Clique em Generate new token
-     ↓
-Preencha Token description: github-actions-cd
-     ↓
-Em Access permissions, escolha: Read & Write
-     ↓
-Clique em: Generate
-     ↓
-O Docker vai mostrar o token uma única vez. Vai começar com algo assim: dckr_pat_
+Copie **todo o conteúdo**, incluindo as linhas de cabeçalho e rodapé:
+```
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXk...
+(várias linhas de texto codificado)
+...
+-----END OPENSSH PRIVATE KEY-----
 ```
 
-## PASSO FINAL - Criar o arquivo do GitHub Actions
+### Gerando o Personal Access Token do Docker Hub
 
-No seu projeto local, crie a seguinte estrutura:
+1. Acesse [hub.docker.com](https://hub.docker.com)
+2. Vá em **Account Settings → Security → Personal Access Tokens**
+3. Clique em **Generate New Token**
+4. Nome: `github-actions-cd`
+5. Permissão: **Read & Write** (precisa para fazer push de imagens)
+6. Clique em **Generate**
 
-```Plain
-.github/
-  workflows/
-    cd.yml
-``` 
+> O token aparece **apenas uma vez**. Copie e salve imediatamente no Secret `DOCKER_PASSWORD`.
 
-Cole este conteúdo e salve-o no arquivo: 
+---
 
-```YAML
+## PASSO 5 — Criar o Workflow do GitHub Actions
+
+### Estrutura de arquivos
+
+Crie a seguinte estrutura no seu projeto:
+
+```
+seu-projeto/
+├── .github/
+│   └── workflows/
+│       └── cd.yml      ← arquivo do pipeline
+├── app.py
+├── requirements.txt
+└── Dockerfile
+```
+
+O GitHub Actions detecta automaticamente arquivos `.yml` dentro de `.github/workflows/` e os executa conforme as configurações.
+
+### O arquivo do pipeline
+
+```yaml
 name: CI/CD - Python App
 
+# Dispara o pipeline quando há push na branch main
 on:
   push:
     branches: [ "main" ]
 
 jobs:
   build-and-deploy:
+    # O runner é uma VM Ubuntu temporária criada pelo GitHub
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Baixa o código do repositório para o runner
       - name: Checkout código
         uses: actions/checkout@v4
 
+      # 2. Instala Python no runner
       - name: Set up Python
         uses: actions/setup-python@v3
         with:
           python-version: "3.10"
 
+      # 3. Instala as dependências do projeto
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flake8 pytest
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+      # 4. Verifica qualidade de código com flake8
+      # E9: erros de sintaxe, F63/F7/F82: undefined names
       - name: Lint
         run: |
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
+      # 5. Autentica no Docker Hub com as credenciais dos Secrets
       - name: Login Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # 6. Constrói a imagem Docker e envia para o Docker Hub
       - name: Build and push imagem
         uses: docker/build-push-action@v5
         with:
@@ -308,6 +312,7 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/app_users:latest
 
+      # 7. Conecta na EC2 via SSH e atualiza o container
       - name: Deploy na EC2
         uses: appleboy/ssh-action@master
         with:
@@ -315,11 +320,85 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # Baixa a nova versão da imagem
             docker pull ${{ secrets.DOCKER_USERNAME }}/app_users:latest
+            # Para o container atual (|| true evita erro se não existir)
             docker stop app_users || true
+            # Remove o container antigo
             docker rm app_users || true
+            # Sobe o novo container
             docker run -d -p 80:5000 --name app_users \
               ${{ secrets.DOCKER_USERNAME }}/app_users:latest
 ```
 
-Depois vá no GitHub aba "Actions". Você verá o workflow rodando.
+### Entendendo cada step
+
+**`actions/checkout@v4`:** faz o download do código do repositório para a máquina do runner. Sem isso, os steps seguintes não teriam o código para trabalhar.
+
+**`actions/setup-python@v3`:** instala o Python na versão especificada. O runner tem Python disponível, mas essa action garante a versão correta.
+
+**`docker/login-action@v3`:** autentica no Docker Hub. Os steps seguintes podem fazer push de imagens porque já estão autenticados.
+
+**`docker/build-push-action@v5`:** executa `docker build` e `docker push` em um único step, com otimizações de cache.
+
+**`appleboy/ssh-action@master`:** estabelece uma conexão SSH com a EC2 usando a chave privada dos Secrets e executa os comandos do `script`.
+
+---
+
+## Verificando a Execução
+
+Após fazer push para a branch `main`, acesse a aba **Actions** no GitHub. Você verá o workflow aparecendo com um ícone de carregamento.
+
+Clique no workflow para ver os logs de cada step em tempo real:
+
+```
+✅ Checkout código       (2s)
+✅ Set up Python         (5s)
+✅ Install dependencies  (30s)
+✅ Lint                  (3s)
+✅ Login Docker Hub      (4s)
+✅ Build and push imagem (45s)
+✅ Deploy na EC2         (15s)
+```
+
+Se algum step falhar (❌), clique nele para ver o log completo com a mensagem de erro.
+
+---
+
+## Testando o Deploy
+
+Com o pipeline funcionando, teste o fluxo completo:
+
+```bash
+# 1. Faça uma mudança no código
+echo "# teste de CD" >> app.py
+
+# 2. Commit e push
+git add .
+git commit -m "test: verificar pipeline de CD"
+git push origin main
+
+# 3. Acesse a aba Actions e veja o pipeline executar
+
+# 4. Após o pipeline verde, acesse a aplicação
+curl http://18.231.250.104
+```
+
+---
+
+## Troubleshooting Comum
+
+**Pipeline falha no step de SSH:**
+- Verifique se o Secret `EC2_SSH_KEY` contém a chave completa (incluindo BEGIN e END)
+- Confirme que a porta 22 está aberta no Security Group para qualquer IP (`0.0.0.0/0`) ou pelo menos para os IPs da GitHub (`140.82.112.0/20`)
+
+**Permission denied no Docker:**
+- Verifique se o usuário `deploy-python` está no grupo `docker`: `groups deploy-python`
+- Se acabou de adicionar ao grupo, faça logout e login na sessão SSH
+
+**Imagem não encontrada na EC2:**
+- Verifique se o Docker Hub username no Secret é idêntico ao do YAML
+- Confirme que o `docker login` foi bem-sucedido no step anterior
+
+**Container não sobe:**
+- Conecte-se à EC2 e verifique os logs: `docker logs app_users`

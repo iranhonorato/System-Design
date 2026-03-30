@@ -1,366 +1,452 @@
-# Docker 
+# Docker
 
-## 1. O que é Docker: 
+## 1. O que é Docker?
 
-**Definição:** O Docker é uma plataforma que permite empacotar uma aplicação e todas as suas dependências (bibliotecas, configurações, banco de dados) dentro de uma unidade chamada Container. 
+Docker é uma plataforma de **conteinerização** que permite empacotar uma aplicação junto com todas as suas dependências (bibliotecas, configurações, runtime) em uma unidade portátil e isolada chamada **container**.
 
-A ideia central é: **"Se funciona na minha máquina, vai funcionar em qualquer lugar"**.
+O princípio central é: **"Build once, run anywhere"** — você constrói a imagem uma vez e ela roda de forma idêntica no notebook do desenvolvedor, no servidor de staging e na instância EC2 de produção.
 
----
-### 1.1 Conceitos Chave:
+### Por que o Docker importa?
 
-**Imagem:** 
+Antes do Docker, um dos maiores pesadelos do desenvolvimento era o **problema de ambiente**:
 
-A imagem é um arquivo estático e imutável. Ela contém tudo o que sua aplicação precisa: o sistema operacional simplificado, o código, as bibliotecas (como Python ou Node.js) e as configurações. Imagine a imagem como sendo uma "receita do bolo". Além disso, uma imagem é feita de fatias.
+- Dev: "Funciona na minha máquina"
+- QA: "Aqui dá erro"
+- Ops: "Em produção quebrou"
 
-- Camada 1: Um Linux básico.
-- Camada 2: O Python instalado.
-- Camada 3: O seu código de inteligência artificial.
-
-Por que a imagem é dita um "aquivo estático"? Para garantir que, se você enviar essa imagem para um colega, ele terá exatamente o mesmo ambiente que você.
-
-**Container:** 
-
-O container é a instância viva da imagem. Quando você diz ao Docker para "rodar" uma imagem, ele cria um container, ou seja, o container é basicamente uma imagem em execução. Imagine que se a imagem é a "receita do bolo", o container é "o bolo pronto em cima da mesa".
-
-
-**Docker Hub:** 
-
-O Docker Hub é o lugar onde a comunidade e as empresas (como Microsoft, Oracle, Google) deixam suas imagens prontas para você usar. Uma espécie de "App Store" de imagens prontas (onde você baixa imagens do Python, MySQL, Nginx, etc.).
-
-No Docker Hub você pode subir suas próprias imagens para o Docker Hub (públicas ou privadas) para baixar no servidor da sua empresa depois. Além disso, lá existem imagens verificadas. Imagine que você precisa de Python, você baixa a imagem oficial do Python, que já foi testada e é segura.
-
-Para entender como o Docker funciona "por baixo do capô", precisamos olhar para a diferença entre ele e uma Máquina Virtual (VM) tradicional. Enquanto uma VM cria um computador inteiro virtualizado, o Docker é muito mais cirúrgico.
+Cada ambiente tinha versões diferentes de Python, Node, Java, bibliotecas de sistema e configurações. O Docker elimina esse problema ao **fazer o ambiente parte do código** — o mesmo Dockerfile que você usa no desenvolvimento é o que vai para produção.
 
 ---
 
-### 1.2 Mas afinal, pra que tudo isso? 
+## 2. Conceitos Fundamentais
 
-O Docker não é apenas uma "modinha" entre desenvolvedores; ele resolve dores reais:
+### 2.1 Imagem (Image)
 
-* **Isolamento:** Você pode rodar duas versões diferentes da mesma linguagem no mesmo computador sem que uma quebre a outra.
+Uma imagem é um **arquivo estático e imutável** que contém tudo que sua aplicação precisa para rodar: o sistema operacional simplificado, o runtime (Python, Node, Java), as bibliotecas e o seu código.
 
-* **Portabilidade:** O container que você criou no Windows vai rodar identicamente no Linux de um servidor na nuvem (AWS, Azure, Google Cloud).
+Pense na imagem como uma **fotografia de um ambiente pronto**. Uma vez criada, ela não muda. Isso garante que se você enviar essa imagem para qualquer lugar, o ambiente será exatamente o mesmo.
 
-* **Agilidade:** Subir um banco de dados inteiro com Docker leva segundos, enquanto instalar manualmente pode levar horas.
+**Imagens são compostas por camadas (layers):**
 
-* **Padronização:** Garante que todo o time de desenvolvimento esteja usando exatamente o mesmo ambiente.
+```
+┌─────────────────────────────────┐
+│  Camada 4: seu código           │  ← sua camada
+├─────────────────────────────────┤
+│  Camada 3: suas dependências    │  ← pip install / npm install
+├─────────────────────────────────┤
+│  Camada 2: Python 3.11          │  ← runtime
+├─────────────────────────────────┤
+│  Camada 1: Ubuntu 22.04         │  ← base
+└─────────────────────────────────┘
+```
 
+**Por que camadas importam?** O Docker usa um sistema de cache inteligente. Se você mudar apenas o seu código (camada 4), o Docker reaproveita as camadas 1, 2 e 3 do cache — o rebuild fica muito mais rápido. Só a camada alterada e as acima dela são reconstruídas.
 
-## 2. Como funciona o Docker: 
+### 2.2 Container
 
-### 2.1 A Arquitetura: Cliente e Servidor
+O container é a **instância em execução de uma imagem**. Quando você manda o Docker rodar uma imagem, ele cria um container — um processo isolado com seu próprio sistema de arquivos, rede e recursos.
 
-O Docker utiliza uma arquitetura cliente-servidor. Quando você digita um comando no terminal, você está falando com o **Docker Client** (É onde você está. Quando você abre o seu terminal - CMD, PowerShell ou Bash - e digita docker run, você está usando o **Docker Client**). 
+```
+Imagem  →  docker run  →  Container
+(estático)               (em execução)
 
-O Docker Clint envia a ordem para o **Docker Daemon** (Chamado de **dockerd** - o verdadeiro motor. Ele fica rodando em segundo plano no sistema operacional. Ele ouve as solicitações do Cliente. Quando você pede para rodar um container, é o Daemon que vai verificar se a imagem existe, baixar se necessário e reservar a memória RAM para ela. Ele gerencia o isolamento, garantindo que um container não invada o espaço do outro).
+Analogia:
+Receita de bolo → Processo de assar → Bolo pronto na mesa
+```
 
-O **Registry**, por sua vez, é onde ficam guardadas as imagens. O mais famoso é o Docker Hub. Quando o Daemon percebe que você quer rodar algo que não tem no computador, ele corre até o Registry, baixa a imagem e a armazena localmente.
+Múltiplos containers podem ser criados a partir da mesma imagem, rodando simultaneamente e de forma completamente independente.
 
----
+### 2.3 Dockerfile
 
+O Dockerfile é o **arquivo de instruções** que descreve como construir uma imagem. É um arquivo de texto simples, sem extensão, que fica na raiz do projeto.
 
-### 2.2 A Mágica do Isolamento (Kernel do Linux)
+```dockerfile
+# 1. Imagem base (ponto de partida)
+FROM python:3.11-slim
 
-Diferente das VMs, o Docker não instala um sistema operacional inteiro dentro de cada container. Ele usa recursos do próprio "núcleo" (Kernel) do sistema hospedeiro para isolar os processos (Imagine que as VMs são casas independentes e o Docker são apartamentos em um prédio):
-
-* **Namespaces**: Garantem que cada container tenha sua própria visão do sistema (rede, usuários, processos), como se estivesse sozinho no computador.
-
-* **Control Groups (cgroups)**: Limitam quanto de CPU e Memória cada container pode usar, evitando que um app "fominha" derrube o computador inteiro.
-
-### 2.3 O Sistema de Arquivos em Camadas (Union File Systems)
-
-Este é o segredo da leveza do Docker. As imagens são compostas por camadas sobrepostas:
-
-*  Se você tem uma imagem de Python, ela tem uma camada com o Linux básico e outra com o Python instalado.
-* Quando você cria uma aplicação sua baseada nela, o Docker apenas adiciona uma camada fina de escrita no topo.
-* As camadas de baixo são somente leitura e podem ser compartilhadas entre vários containers, economizando muito espaço em disco.
-
----
-
-## 3. Primeiros passos 
-
-### 3.1 Instalação (O Motor)
-
-Antes de tudo, você precisa do Docker rodando no seu computador.
-
-* Acesse o site oficial **`Docker Desktop`**. 
-* Baixe a versão para o seu sistema (Windows, Mac ou Linux).
-* Dica para Windows: Ele vai pedir para instalar o "WSL 2" (Windows Subsystem for Linux). Aceite e instale, pois é isso que permite ao Docker rodar com performance nativa no Windows.
-* Após instalar e reiniciar, abra o Docker Desktop e espere o ícone da baleia ficar parado (verde).
-
-**Observação:**
----
-
-WSL significa Windows Subsystem for Linux (Subsistema do Windows para Linux). É uma funcionalidade do Windows que permite rodar Linux diretamente dentro do Windows, sem precisar instalar máquina virtual ou fazer dual boot.
-
-**O que isso significa na prática?** 
-
-Com o WSL você pode:
-
-* Usar o terminal do Linux (bash)
-* Instalar distribuições como Ubuntu, Debian, Kali
-* Rodar comandos como ls, grep, apt, ssh
-* Desenvolver com ferramentas Linux (Node, Python, Docker, etc.)
-* Trabalhar com desenvolvimento backend, DevOps e programação em geral
-
-**Existe mais de uma versão?**
-
-* WSL = tecnologia do Windows para rodar Linux dentro do Windows
-* WSL 1 = primeira versão (tradução de chamadas do Linux para o Windows)
-* WSL 2 = segunda versão, usa um kernel Linux real (muito mais rápido e compatível)
-
----
-
-### 3.2 O Primeiro Teste (Hello World)
-
-Abra o seu terminal (PowerShell no Windows, ou Terminal no Mac/Linux) e digite: **`docker run hello-world`**
-
-O que vai acontecer?
-
-* O Client pergunta ao Daemon se ele tem a imagem hello-world.
-* Como você acabou de instalar, ele não terá. Ele vai dizer: Unable to find image... locally.
-* Ele vai baixar (Pull) a imagem do Docker Hub.
-* Ele vai criar o Container e rodar. Você verá uma mensagem de boas-vindas na tela.
-
-### 3.3 Rodando um Servidor de Simulado:
-
-Vamos subir um servidor de sites (Nginx) sem instalar nada no seu OS. O objetivo é simular o ambiente de um servidor real sem sair da sua máquina.
-
-**`docker run -d -p 8080:80 --name meu-site nginx`**
-
-Explicando os termos:
-
-* **`-d`** (Detached): Roda o container em segundo plano (você pode continuar usando o terminal).
-* **`-p 7777:80`**: Redireciona a porta 8080 do seu PC para a porta 80 dentro do container.
-* **`--name meu-site`**: Dá um nome amigável ao seu container.
-* Teste agora: Abra o navegador e digite **`localhost:7777`**. Você verá a página "Welcome to nginx!".
-
-O que fizemos aqui: 
-
-* 1) Baixou um software pronto (Nginx) sem precisar configurar instaladores .exe ou .msi.
-* 2) Reservou uma fatia da sua memória para esse software rodar sem interferir em outros programas.
-* 3) Criou uma ponte de comunicação (-p) para que seu navegador pudesse falar com um software "preso" dentro de um container.
-
-### 3.4 Rodando um Servidor de Verdade: 
-
-Para realizar essa atividade precisamos de um **`Dockerfile`**, mas afinal o que é isso? 
-
-**`Dockerfile`** é um arquivo de texto simples, sem extensão (o nome é apenas Dockerfile), que contém uma lista de instruções e encontra-se localizado no mesmo diretório do nosso projeto. O Docker lê esse arquivo e executa cada linha para "buildar" (construir) uma imagem personalizada para o seu projeto.
-
-**Por que precisamos dele no diretório do projeto?**
-
-Ter o Dockerfile junto com o seu código (no mesmo diretório) é o que garante a **portabilidade**.
-
-* **Padronização:** Qualquer pessoa que baixar seu projeto (um novo colega de equipe, por exemplo) só precisa digitar docker build. O Dockerfile vai garantir que o ambiente dele seja idêntico ao seu.
-* **Automação:** Quando você envia seu código para a nuvem (como AWS ou Google Cloud), o servidor lá lê o seu Dockerfile e sabe exatamente como "montar" sua aplicação para colocá-la no ar.
-* **Versionamento:** O Dockerfile fica salvo no seu Git. Se você mudar a versão do seu banco de dados, essa mudança fica registrada no histórico do projeto.
-
-**Como é a estrutura de um dockerfile?**
-
-Um Dockerfile funciona em camadas. Cada comando cria uma nova camada na imagem. A estrutura básica segue este fluxo:
-
-* 1) **FROM:** De onde vamos começar? (A imagem base).
-* 2) **WORKDIR:** Onde vamos trabalhar dentro do container? (A pasta do projeto).
-* 3) **COPY/ADD:** Quais arquivos do meu PC eu quero levar para dentro do container?
-* 4) **RUN:** Quais comandos de instalação preciso rodar? (Ex: npm install ou pip install).
-* 5) **EXPOSE:** Qual porta o container vai "abrir"?
-* 6) **CMD:** Qual o comando final para ligar a aplicação?
-
-**Exemplo prático:**
-
-Imagine que você tem um site simples em Node.js. O seu Dockerfile seria assim:
-
-```dockerfile 
-# 1. Define a imagem base (já vem com Node.js instalado)
-FROM node:18
-
-# 2. Cria uma pasta dentro do container para o seu código
+# 2. Diretório de trabalho dentro do container
 WORKDIR /app
 
-# 3. Copia os arquivos de dependências primeiro (otimiza o cache)
-COPY package*.json ./
+# 3. Copia arquivos de dependências primeiro (otimiza cache)
+COPY requirements.txt .
 
-# 4. Roda o comando para instalar as bibliotecas
-RUN npm install
+# 4. Instala dependências
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copia o restante dos arquivos do seu projeto
+# 5. Copia o restante do código
 COPY . .
 
-# 6. Informa que o app usa a porta 3000
-EXPOSE 3000
+# 6. Porta que a aplicação vai usar (documentação)
+EXPOSE 5000
 
-# 7. O comando que "liga" o site de fato
-CMD ["node", "server.js"]
+# 7. Comando de inicialização
+CMD ["python", "app.py"]
 ```
 
-**Como usar esse arquivo?**
+> **Por que copiar o requirements.txt antes do código?** Se você copiar tudo de uma vez e depois mudar uma linha do código, o Docker invalida o cache do `pip install` e reinstala todas as dependências. Separando em dois passos, uma mudança no código apenas invalida o `COPY . .` — o `pip install` permanece cacheado.
 
-Depois de criar esse arquivo na raiz do seu projeto, você usa dois comandos no terminal:
+### 2.4 Docker Hub
 
-* Construir a imagem:
+O Docker Hub é o **registry público** de imagens — uma espécie de "App Store" para imagens Docker. Lá você encontra imagens oficiais e verificadas de praticamente tudo:
 
-```bash
-docker build -t meu-projeto .
-```
+- `python:3.11` — Python oficial
+- `node:20` — Node.js oficial
+- `postgres:16` — PostgreSQL oficial
+- `nginx:latest` — Nginx oficial
 
-O ponto . diz que o Dockerfile está na pasta atual.
+**Por que usar imagens oficiais?** Elas são auditadas, mantidas e atualizadas regularmente com patches de segurança. Evite construir suas imagens do zero quando existe uma base confiável disponível.
 
-* Rodar o container:
+Você também pode criar uma conta gratuita e publicar suas próprias imagens no Docker Hub — o que é essencial para pipelines de CI/CD.
 
-```bash
-docker run -p 3000:3000 meu-projeto
-```
-
-**Por que essa ordem importa?**
-
-Repare que no exemplo eu copiei o package.json antes do resto do código.
-O motivo: O Docker é inteligente. Se você mudar uma linha de texto no seu site, mas não instalar nenhuma biblioteca nova, o Docker percebe que a camada do RUN npm install não mudou e pula ela, tornando o processo de "rebuild" absurdamente rápido.
-
-
-### 3.5 Lista de Comandos: 
-
-## **Comandos de Criação e Construção**
-
-Cria uma imagem a partir do Dockerfile que está na pasta atual.
 ---
 
-```bash
-docker build -t nome-da-imagem .
+## 3. Como o Docker Funciona por Dentro
+
+### 3.1 Arquitetura: Cliente e Daemon
+
+O Docker usa uma arquitetura **cliente-servidor**:
+
+```
+┌────────────────┐        API REST        ┌─────────────────────┐
+│  Docker Client │ ─────────────────────→ │    Docker Daemon     │
+│   (terminal)   │ ←───────────────────── │    (dockerd)         │
+└────────────────┘                        └──────────┬──────────┘
+                                                     │
+                                          ┌──────────▼──────────┐
+                                          │   Docker Hub /       │
+                                          │   Registry           │
+                                          └──────────────────────┘
 ```
 
- O **`-t`** serve para dar uma "tag" (nome) à imagem. **Esse comando precisa ser dado no mesmo diretorio do projeto.**
+- **Docker Client:** a interface de linha de comando (`docker`) que você usa. Quando você digita `docker run`, o cliente envia uma requisição para o daemon.
+- **Docker Daemon (dockerd):** o processo em background que faz o trabalho pesado: cria containers, gerencia imagens, configura redes. Roda como serviço no SO.
+- **Registry:** repositório de imagens. O daemon busca imagens aqui quando você não as tem localmente.
 
+### 3.2 Isolamento com Tecnologias do Kernel Linux
 
-Lista todas as imagens que você já baixou ou construiu no seu computador.
----
+O Docker não inventa um mecanismo de isolamento novo — ele usa recursos que já existem no kernel Linux:
+
+**Namespaces** — criam "visões isoladas" do sistema para cada container:
+
+| Namespace | O que isola |
+|---|---|
+| `pid` | Processos (o container acha que seu processo é o PID 1) |
+| `net` | Interface de rede, tabelas de roteamento, portas |
+| `mnt` | Sistema de arquivos (cada container enxerga apenas o seu) |
+| `uts` | Hostname (o container tem seu próprio hostname) |
+| `user` | Usuários e grupos |
+| `ipc` | Memória compartilhada entre processos |
+
+**Control Groups (cgroups)** — limitam o consumo de recursos:
+
 ```bash
-docker images
+# Exemplo: container limitado a 512MB de RAM e 0.5 CPU
+docker run --memory="512m" --cpus="0.5" minha-imagem
 ```
 
-## **Comandos de Execução (Ciclo de Vida)**
+Sem cgroups, um container mal-comportado poderia consumir toda a memória do servidor e derrubar os outros containers.
 
+### 3.3 Sistema de Arquivos em Camadas (Union File System)
 
-Baixa a imagem, cria e inicia novo um container (se não tiver). 
---- 
-```bash
-docker run -d --name meu-container -p 7777:99 nome-da-imagem
+As imagens Docker usam um sistema de arquivos em camadas sobrepostas. Cada instrução do Dockerfile cria uma nova camada — e as camadas são **somente leitura**. Quando um container roda, o Docker adiciona uma **camada de escrita** no topo (Container Layer), onde todas as modificações feitas em runtime ficam armazenadas.
+
+```
+┌─────────────────────┐  ← Container Layer (escrita - temporária)
+├─────────────────────┤
+│  Camada 3 (código)  │
+├─────────────────────┤  ← Image Layers (somente leitura)
+│  Camada 2 (Python)  │
+├─────────────────────┤
+│  Camada 1 (Ubuntu)  │
+└─────────────────────┘
 ```
 
-* **`-d`**: Roda em segundo plano (background).
+**Vantagem do compartilhamento:** se você tem 10 containers baseados na mesma imagem Python, as camadas da imagem existem **uma única vez no disco** e são compartilhadas entre todos os containers. Cada container tem apenas sua própria camada de escrita.
 
-* **`-p`**: Mapeia a porta (PC:Container).
+> **Atenção:** a camada de escrita do container é **temporária**. Quando o container é removido, tudo que foi escrito nela é perdido. Para persistir dados, use **Volumes**.
 
-* **`7777:99`**: 7777 (Lado do Host/Seu PC) é a porta que você vai digitar no seu navegador (localhost:8080). Você pode escolher quase qualquer número aqui (ex: 7777, 9000, 5000), desde que não esteja sendo usado por outro programa. 99 (Lado do Container) é a porta onde o software dentro do container está configurado para "ouvir"
-
-Desliga o container graciosamente.
 ---
+
+## 4. Instalação
+
+### Docker Desktop (Windows e Mac)
+1. Acesse [docker.com](https://www.docker.com) e baixe o Docker Desktop
+2. No Windows, aceite a instalação do **WSL 2** (Windows Subsystem for Linux) — é o que permite o Docker rodar com performance nativa
+3. Após instalar, aguarde o ícone da baleia verde no menu do sistema
+
+### Linux (Ubuntu)
 ```bash
-docker stop nome-do-container
+# Método recomendado: script oficial
+curl -fsSL https://get.docker.com | sh
+
+# Adicionar seu usuário ao grupo docker (evita usar sudo a cada comando)
+sudo usermod -aG docker $USER
+
+# Relogar para aplicar o grupo
+newgrp docker
 ```
 
-
-Liga um container que estava parado (mantendo as alterações feitas nele).
----
+**Verificando a instalação:**
 ```bash
-docker start nome-do-container
+docker --version
+docker run hello-world
 ```
 
-
-Desliga e liga novamente.
 ---
+
+## 5. Primeiros Passos
+
+### 5.1 Hello World
+
 ```bash
-docker restart nome-do-container
+docker run hello-world
 ```
 
+O que acontece nos bastidores:
+1. Docker Client envia o pedido ao Daemon
+2. Daemon verifica se a imagem `hello-world` existe localmente → não existe
+3. Daemon faz pull do Docker Hub
+4. Daemon cria um container a partir da imagem
+5. Container executa, imprime a mensagem e para
 
-Lista os containers que estão rodando agora.
----
+### 5.2 Rodando um Servidor Web
+
 ```bash
-docker ps
+docker run -d -p 8080:80 --name meu-nginx nginx
 ```
 
+Detalhando os parâmetros:
 
-Lista todos os containers (rodando e parados).
----
-```bash
-docker ps -a
+| Parâmetro | Significado |
+|---|---|
+| `-d` | Detached: roda em background (você continua usando o terminal) |
+| `-p 8080:80` | Mapeia porta 8080 do host → porta 80 do container |
+| `--name meu-nginx` | Nome amigável para o container |
+| `nginx` | Nome da imagem |
+
+Acesse `http://localhost:8080` e verá a página do Nginx.
+
+**Entendendo o mapeamento de portas:**
+```
+Seu navegador → localhost:8080 → Docker → container:80 → Nginx
+```
+O container está "fechado" — a flag `-p` cria uma "janela" que redireciona tráfego da porta do host para dentro do container.
+
+### 5.3 Construindo sua Própria Imagem
+
+Com um projeto Python simples:
+
+```
+meu-projeto/
+├── app.py
+├── requirements.txt
+└── Dockerfile
 ```
 
-
-## **Comandos de Limpeza (Descarte)**
-
-
-Apaga um container (ele precisa estar parado).
----
-```bash
-docker rm nome-do-container
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 5000
+CMD ["python", "app.py"]
 ```
 
-
-Apaga uma imagem do seu disco.
----
 ```bash
-docker rmi nome-da-imagem
+# Construir a imagem
+docker build -t meu-app:1.0 .
+
+# Rodar o container
+docker run -d -p 5000:5000 --name meu-app meu-app:1.0
 ```
 
-
-O "limpa tudo": apaga todos os containers parados e imagens sem uso de uma vez.
 ---
+
+## 6. Volumes: Persistindo Dados
+
+Como a camada de escrita do container é temporária, dados importantes precisam ser armazenados em **Volumes** — espaços de armazenamento gerenciados pelo Docker que persistem independentemente do ciclo de vida do container.
+
 ```bash
-docker system prune
+# Criar um volume
+docker volume create meus-dados
+
+# Usar o volume no container
+docker run -d \
+  -v meus-dados:/app/data \
+  --name minha-api \
+  minha-imagem
 ```
 
+O diretório `/app/data` dentro do container agora está mapeado para o volume `meus-dados` no host. Mesmo que o container seja removido e recriado, os dados persistem.
 
-# **Comandos de Rede e Comunicação**
----
+**Bind mounts** — mapear uma pasta local para dentro do container (útil para desenvolvimento):
 
-Criar uma rede 
----
 ```bash
+docker run -d \
+  -v $(pwd)/codigo:/app \  # pasta local → pasta no container
+  -p 5000:5000 \
+  minha-imagem
+```
+
+Agora mudanças no código local refletem imediatamente dentro do container — sem precisar rebuild.
+
+---
+
+## 7. Redes Docker
+
+Por padrão, containers em redes diferentes não se enxergam. Para que containers se comuniquem (ex: API + banco de dados), eles precisam estar na mesma rede:
+
+```bash
+# Criar uma rede
 docker network create minha-rede
+
+# Rodar banco de dados na rede
+docker run -d \
+  --name banco \
+  --network minha-rede \
+  -e POSTGRES_PASSWORD=senha123 \
+  postgres:16
+
+# Rodar a API na mesma rede
+docker run -d \
+  --name api \
+  --network minha-rede \
+  -p 5000:5000 \
+  minha-api-imagem
 ```
 
+Dentro da rede Docker, containers se comunicam pelo **nome do container** como hostname:
 
-Rodar o banco de dados na rede
----
-```bash
-docker run -d --name banco --network minha-rede mongo
+```python
+# Na API, conectar ao banco usando o nome do container
+DATABASE_URL = "postgresql://user:senha@banco:5432/mydb"
+#                                          ↑
+#                                  nome do container
 ```
 
-
-Rodar o Site na mesma rede
 ---
+
+## 8. Referência de Comandos
+
+### Imagens
+
 ```bash
-docker run -d --name site --network minha-rede meu-site-imagem
+# Listar imagens locais
+docker images
+
+# Baixar imagem do registry
+docker pull nginx:latest
+
+# Construir imagem a partir do Dockerfile na pasta atual
+docker build -t nome-da-imagem:tag .
+
+# Remover imagem
+docker rmi nome-da-imagem
+
+# Enviar imagem para o Docker Hub
+docker push seu-usuario/nome-da-imagem:tag
 ```
 
+### Containers
 
-Listar todas as redes criadas
----
 ```bash
+# Criar e iniciar container
+docker run [opções] nome-da-imagem
+
+# Listar containers em execução
+docker ps
+
+# Listar todos os containers (incluindo parados)
+docker ps -a
+
+# Parar container graciosamente
+docker stop nome-do-container
+
+# Iniciar container parado
+docker start nome-do-container
+
+# Remover container (deve estar parado)
+docker rm nome-do-container
+
+# Parar e remover em um comando
+docker rm -f nome-do-container
+```
+
+### Inspeção e Debug
+
+```bash
+# Ver logs do container (em tempo real com -f)
+docker logs -f nome-do-container
+
+# Entrar no container com terminal interativo
+docker exec -it nome-do-container bash
+# ou para imagens minimalistas sem bash:
+docker exec -it nome-do-container sh
+
+# Inspecionar detalhes do container (JSON completo)
+docker inspect nome-do-container
+
+# Ver uso de recursos em tempo real
+docker stats
+```
+
+### Limpeza
+
+```bash
+# Remover todos os containers parados
+docker container prune
+
+# Remover imagens sem uso
+docker image prune
+
+# Limpeza completa (containers, imagens, volumes, redes sem uso)
+docker system prune -a
+```
+
+### Volumes e Redes
+
+```bash
+# Criar volume
+docker volume create nome-do-volume
+
+# Listar volumes
+docker volume ls
+
+# Criar rede
+docker network create nome-da-rede
+
+# Listar redes
 docker network ls
-```
 
-
-Mostra detalhes da rede, incluindo quais containers estão nela e quais os IPs internos (caso você precise muito saber o IP).
----
-```bash
+# Inspecionar rede (ver containers conectados)
 docker network inspect nome-da-rede
 ```
 
-
-# **Comandos de Inspeção (O que está acontecendo lá dentro?)**
 ---
 
-Mostra em tempo real o que o seu app está "printando" no console (ajuda muito a achar erros).
----
-```bash
-docker logs -f nome-do-container
+## 9. Boas Práticas
+
+**Use imagens base slim/alpine:** `python:3.11-slim` é muito menor que `python:3.11`. Imagens menores = transferência mais rápida, menos superfície de ataque.
+
+**Não rode como root:** adicione um usuário não-privilegiado no Dockerfile:
+```dockerfile
+RUN useradd -m appuser
+USER appuser
 ```
 
-Este comando "entra" no container. É como se você abrisse um terminal dentro daquela máquina isolada para navegar nas pastas.
----
+**Use .dockerignore:** similar ao .gitignore, evita copiar arquivos desnecessários para a imagem:
+```
+.git
+__pycache__
+*.pyc
+.env
+node_modules
+```
+
+**Uma responsabilidade por container:** containers devem ter um único processo principal. Não coloque o banco de dados e a API no mesmo container.
+
+**Variáveis de ambiente para configuração:** nunca coloque senhas hardcoded no Dockerfile. Use variáveis de ambiente:
 ```bash
-docker exec -it nome-do-container sh
+docker run -e DATABASE_URL="postgresql://..." minha-imagem
 ```

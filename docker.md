@@ -425,11 +425,150 @@ docker network inspect nome-da-rede
 
 ---
 
-## 9. Boas Práticas
+## 9. Docker Compose
 
-**Use imagens base slim/alpine:** `python:3.11-slim` é muito menor que `python:3.11`. Imagens menores = transferência mais rápida, menos superfície de ataque.
+Gerenciar containers individualmente com `docker run` fica inviável quando a aplicação tem vários serviços (API + banco + Redis + worker). O **Docker Compose** resolve isso com um único arquivo declarativo que descreve todos os serviços.
 
-**Não rode como root:** adicione um usuário não-privilegiado no Dockerfile:
+```yaml
+# docker-compose.yml
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:senha@postgres:5432/mydb
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy   # espera o banco estar pronto (não apenas iniciado)
+      redis:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: senha
+      POSTGRES_DB: mydb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+**Comandos essenciais do Compose:**
+
+```bash
+# Sobe todos os serviços em background
+docker compose up -d
+
+# Sobe e reconstrói imagens (após mudanças no Dockerfile)
+docker compose up -d --build
+
+# Ver logs de todos os serviços (ou de um específico)
+docker compose logs -f
+docker compose logs -f api
+
+# Para e remove containers (volumes persistem)
+docker compose down
+
+# Para e remove containers E volumes (útil para reset completo)
+docker compose down -v
+
+# Roda um comando em um serviço sem criar novo container
+docker compose exec api python manage.py migrate
+
+# Ver status dos serviços
+docker compose ps
+```
+
+> **depends_on com condition:** o `depends_on` simples apenas espera o container *iniciar*, não estar *pronto*. Use `condition: service_healthy` com um `healthcheck` para garantir que o banco aceita conexões antes de a API tentar conectar.
+
+---
+
+## 10. Multi-Stage Builds
+
+Imagens de produção devem ser o menor possível — sem ferramentas de build, compiladores ou dependências de desenvolvimento. **Multi-stage builds** resolvem isso: você usa um container para compilar/construir e outro apenas para rodar.
+
+**Exemplo com aplicação Python:**
+
+```dockerfile
+# ── Stage 1: Builder ──────────────────────────────────────
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Instala dependências em um diretório isolado
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ── Stage 2: Runtime ──────────────────────────────────────
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+# Copia apenas as dependências já instaladas do stage anterior
+COPY --from=builder /install /usr/local
+
+# Copia apenas o código da aplicação
+COPY app/ ./app/
+
+# Usuário não-root para segurança
+RUN useradd -m appuser
+USER appuser
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```
+Tamanho comparativo:
+  Sem multi-stage:  ~1.2 GB  (inclui pip, compiladores, cache)
+  Com multi-stage:  ~180 MB  (apenas runtime + código + deps)
+```
+
+**Exemplo com Node.js (TypeScript):**
+
+```dockerfile
+# Stage 1: Compila o TypeScript
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build   # compila TS → JS em /dist
+
+# Stage 2: Imagem de produção (sem TypeScript, sem node_modules de dev)
+FROM node:20-alpine AS runtime
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev   # só dependências de produção
+COPY --from=builder /app/dist ./dist
+USER node
+CMD ["node", "dist/main.js"]
+```
+
+---
+
+## 11. Boas Práticas
+
+**Use imagens base slim/alpine:** `python:3.12-slim` é muito menor que `python:3.12`. Imagens menores = transferência mais rápida, menos superfície de ataque.
+
+**Não rode como root:** adicione um usuário não-privilegiado no Dockerfile. Um container comprometido rodando como root pode escalar privilégios para o host:
 ```dockerfile
 RUN useradd -m appuser
 USER appuser

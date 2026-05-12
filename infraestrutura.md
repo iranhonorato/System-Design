@@ -28,7 +28,7 @@ Uma boa analogia: se o seu código é um restaurante, a infraestrutura é o pré
 
 É a camada de software que gerencia o hardware e cria a fundação para as aplicações:
 
-**Sistemas Operacionais:** Windows Server e distribuições Linux (Ubuntu Server, CentOS, Debian) são os mais comuns. Em ambientes de produção, Linux domina por ser gratuito, estável e extremamente configurável.
+**Sistemas Operacionais:** Windows Server e distribuições Linux (Ubuntu Server, Debian, Rocky Linux, AlmaLinux) são os mais comuns. Em ambientes de produção, Linux domina por ser gratuito, estável e extremamente configurável. O CentOS, amplamente usado no passado, chegou ao fim de vida (EOL) em dezembro de 2021 — suas substituições diretas são **Rocky Linux** e **AlmaLinux**, ambas compatíveis com RHEL.
 
 **Virtualizadores (Hypervisors):** Software que cria máquinas virtuais — VMware ESXi, Microsoft Hyper-V, KVM (Linux). Veremos mais sobre isso na seção histórica.
 
@@ -202,6 +202,38 @@ Esse arquivo é:
 - **Ansible:** configura servidores existentes (instala pacotes, configura serviços)
 - **Docker Compose:** orquestra múltiplos containers localmente
 - **Kubernetes manifests:** descreve como aplicações devem rodar em clusters
+
+---
+
+## Orquestração de Containers: Kubernetes
+
+Quando o número de containers cresce (dezenas ou centenas de instâncias), o Docker sozinho não é suficiente. O **Kubernetes (K8s)** é o padrão da indústria para orquestrar containers em produção.
+
+```
+┌────────────────────────────────────────────────────────┐
+│                  CLUSTER KUBERNETES                     │
+│                                                        │
+│  Control Plane                                         │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  API Server  │  Scheduler  │  etcd (estado)      │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│  Worker Nodes                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
+│  │   Node 1    │  │   Node 2    │  │   Node 3    │   │
+│  │  [Pod][Pod] │  │  [Pod][Pod] │  │  [Pod][Pod] │   │
+│  └─────────────┘  └─────────────┘  └─────────────┘   │
+└────────────────────────────────────────────────────────┘
+```
+
+O Kubernetes cuida automaticamente de:
+- **Self-healing:** reinicia containers que falham
+- **Auto-scaling:** aumenta/diminui réplicas conforme a carga
+- **Rolling updates:** atualiza containers sem downtime
+- **Service discovery:** containers se encontram pelo nome, não pelo IP
+- **Load balancing:** distribui tráfego entre réplicas
+
+Em nuvem, os provedores oferecem Kubernetes gerenciado: **AWS EKS**, **Google GKE**, **Azure AKS** — você não gerencia o control plane.
 
 ---
 

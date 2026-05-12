@@ -152,7 +152,7 @@ Um pipeline é uma sequência de **stages** (etapas) que o código percorre. Cad
 
 **Testes End-to-End (E2E):** simulam o comportamento do usuário real no sistema. Ex: "abra o browser, faça login, adicione produto ao carrinho, finalize compra". São os mais lentos e devem ser usados com moderação.
 
-**Análise Estática (Lint):** ferramentas que analisam o código sem executá-lo. Detectam problemas de formatação, padrões perigosos, código morto. Ex: `flake8` (Python), `eslint` (JavaScript).
+**Análise Estática (Lint):** ferramentas que analisam o código sem executá-lo. Detectam problemas de formatação, padrões perigosos, código morto. Ex: `ruff` (Python moderno — substitui flake8, isort e black em uma só ferramenta, ~100x mais rápido), `eslint` (JavaScript).
 
 ---
 

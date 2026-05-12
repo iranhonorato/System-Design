@@ -250,15 +250,15 @@ Resultado: todos os clientes respondidos sem esperar uns pelos outros
   ───────────────┼──────────────────┼───────────────────────┤
   Concorrência   │  Não             │  Sim                  │
   ───────────────┼──────────────────┼───────────────────────┤
-  Condição de    │  Impossível      │  Possível — requer     │
+  Condição de    │  Impossível      │  Possível — requer    │
   corrida        │                  │  sincronização        │
   ───────────────┼──────────────────┼───────────────────────┤
   Uso de CPU     │  1 núcleo        │  Múltiplos núcleos    │
   ───────────────┼──────────────────┼───────────────────────┤
   Ideal para     │  Operações       │  Operações que        │
                  │  ultrarrápidas   │  esperam (I/O, rede,  │
-                 │  (Redis, Nginx   │  disco) ou que usam   │
-                 │  event loop)     │  CPU intensamente     │
+                 │  (Redis, event   │  disco) ou que usam   │
+                 │  loops isolados) │  CPU intensamente     │
                  └──────────────────┴───────────────────────┘
 ```
 
@@ -438,12 +438,37 @@ Problema: criar e destruir threads tem custo.
 Com 10.000 conexões simultâneas → 10.000 threads → esgota a RAM.
 ```
 
-### Nginx / Redis — Single-Thread com Multiplexação de I/O
+### Nginx — Multi-Processo com Event Loop por Worker
 
-Nginx (servidor web) e Redis usam um único processo com multiplexação de I/O — monitoram todos os sockets ao mesmo tempo sem criar threads por cliente:
+O Nginx usa um modelo diferente do Apache: um **processo master** e múltiplos **processos worker** (geralmente um por núcleo de CPU). Cada worker é single-threaded e usa multiplexação de I/O para atender milhares de conexões sem criar uma thread por cliente.
 
 ```
-NGINX / REDIS — MULTIPLEXAÇÃO (epoll/kqueue)
+NGINX — ARQUITETURA MULTI-PROCESSO
+
+  Processo Master
+  └── Gerencia workers, lê config, faz reload sem downtime
+
+  Worker 1 (núcleo 0):            Worker 2 (núcleo 1):
+  ┌──────────────────────────┐    ┌──────────────────────────┐
+  │  epoll_wait(sockets...)  │    │  epoll_wait(sockets...)  │
+  │  "Avise quando tiver     │    │  "Avise quando tiver     │
+  │   dados prontos"         │    │   dados prontos"         │
+  └────────────┬─────────────┘    └────────────┬─────────────┘
+               │ socket pronto                  │ socket pronto
+               ▼                               ▼
+        processa conexão               processa conexão
+```
+
+Cada worker usa `epoll` (Linux) ou `kqueue` (macOS) para monitorar todos os seus sockets ao mesmo tempo — sem criar threads extras. O resultado: um servidor com 4 núcleos tem 4 workers, cada um atendendo dezenas de milhares de conexões. É por isso que o Nginx aguenta 10.000 conexões simultâneas com muito menos memória que o Apache tradicional.
+
+> **Distinção importante:** o Nginx NÃO é single-threaded — é **multi-processo com event loop single-threaded por processo**. Cada worker é um processo independente com seu próprio event loop.
+
+### Redis — Single-Thread com Multiplexação de I/O
+
+O Redis é o caso genuinamente single-threaded para processamento de comandos: um único processo, uma única thread, um único event loop:
+
+```
+REDIS — MULTIPLEXAÇÃO (epoll/kqueue)
 
   Thread única monitorando N sockets:
   ┌─────────────────────────────────────┐
@@ -454,17 +479,56 @@ NGINX / REDIS — MULTIPLEXAÇÃO (epoll/kqueue)
   └──────────────────┬──────────────────┘
                      │ socket_B ficou pronto
                      ▼
-              processa socket_B
+              processa socket_B (μs)
                      │ socket_A ficou pronto
                      ▼
-              processa socket_A
+              processa socket_A (μs)
                      │ ...
 
-Sem threads extras. Sem overhead de criação/destruição.
-Um processo aguenta dezenas de milhares de conexões.
+Sem threads extras. Sem locks. Sem condições de corrida.
+100.000+ operações/segundo com um único processo.
 ```
 
-Essa é a razão pela qual o Nginx aguenta 10.000 conexões simultâneas com muito menos memória que o Apache tradicional — e por que o Redis consegue atender 100.000 requisições por segundo com uma única thread.
+O Redis consegue ser single-threaded e performático porque cada operação leva microssegundos — não há espera por disco durante o processamento. A partir da versão 6.0, o I/O de rede é multi-threaded, mas o processamento dos comandos continua serializado na thread principal.
+
+### Python asyncio — Concorrência Assíncrona com Coroutines
+
+Python moderno (3.5+) adota um modelo de concorrência baseado em **coroutines** e `async/await`, que é o que o FastAPI usa internamente:
+
+```python
+import asyncio
+
+async def buscar_dados(cliente_id: int):
+    # Quando o await é atingido, a coroutine "pausa"
+    # e o event loop executa outras coroutines enquanto espera
+    resultado = await banco.query(f"SELECT * FROM clientes WHERE id={cliente_id}")
+    return resultado
+
+async def main():
+    # asyncio.gather executa as três coroutines de forma concorrente
+    # (não paralela — ainda uma thread, mas intercaladas)
+    resultado_a, resultado_b, resultado_c = await asyncio.gather(
+        buscar_dados(1),
+        buscar_dados(2),
+        buscar_dados(3),
+    )
+```
+
+```
+EVENT LOOP DO asyncio:
+
+  Thread única:
+  t=0ms: inicia buscar_dados(1) → encontra await → pausa
+  t=0ms: inicia buscar_dados(2) → encontra await → pausa
+  t=0ms: inicia buscar_dados(3) → encontra await → pausa
+  t=50ms: banco responde para (1) → retoma buscar_dados(1)
+  t=51ms: banco responde para (2) → retoma buscar_dados(2)
+  t=52ms: banco responde para (3) → retoma buscar_dados(3)
+
+Total: ~52ms (vs ~150ms sequencial)
+```
+
+> **Regra de ouro:** `async/await` só é vantajoso para I/O-bound (banco, rede, disco). Para CPU-bound (compressão, ML, criptografia), use `multiprocessing` para paralelismo real — o GIL do Python bloqueia threads para código Python puro.
 
 ### Java / .NET — Thread Pool
 

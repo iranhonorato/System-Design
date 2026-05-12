@@ -247,6 +247,33 @@ k6 simulando carga:
   1000 usuários simultâneos → sistema responde em 3000ms ❌ → gargalo identificado
 ```
 
+**Test Doubles (Dublês de Teste):**
+Quando um teste unitário precisa isolar uma função de suas dependências (banco, APIs externas, e-mail), usa-se um "dublê" no lugar da dependência real:
+
+```python
+from unittest.mock import MagicMock, patch
+
+def test_enviar_email_de_boas_vindas():
+    # Mock: substitui o serviço de e-mail por um objeto falso controlável
+    mock_email_service = MagicMock()
+
+    with patch("app.services.email_service", mock_email_service):
+        cadastrar_usuario("maria@email.com", "Maria")
+
+    # Verifica que o e-mail foi "enviado" com os parâmetros corretos
+    mock_email_service.enviar.assert_called_once_with(
+        destinatario="maria@email.com",
+        template="boas_vindas",
+    )
+```
+
+| Tipo de Dublê | Comportamento |
+|---|---|
+| **Stub** | Retorna valores fixos pré-definidos (simula respostas) |
+| **Mock** | Stub + verifica se foi chamado corretamente |
+| **Fake** | Implementação simplificada real (ex: banco em memória) |
+| **Spy** | Deixa o objeto real funcionar mas registra as chamadas |
+
 **Testes de Regressão:**
 Não são um tipo separado, mas uma prática: toda vez que um bug é corrigido, escreve-se um teste que reproduz esse bug. Isso garante que o bug nunca volte.
 

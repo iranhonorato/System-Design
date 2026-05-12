@@ -37,7 +37,8 @@ O Redis não foi feito para substituir seu banco de dados principal. Ele é uma 
 | **Leaderboards** | Rankings ordenados em tempo real | Top 10 jogadores de um game |
 | **Pub/Sub** | Notificações em tempo real | Chat ao vivo, feeds de notificações |
 | **Contadores** | Incrementos atômicos e rápidos | Número de visualizações de um post |
-| **Locks distribuídos** | Evitar condições de corrida em sistemas distribuídos | Garantir que só um processo processe um pedido |
+| **Locks distribuídos** | Evitar condições de corrida em sistemas distribuídos | Garantir que só um processo processe um pedido (algoritmo Redlock) |
+| **Streams** | Log de eventos persistente com consumers groups | Fila de eventos entre microsserviços com reprocessamento |
 
 ### O que o Redis NÃO é
 
@@ -634,9 +635,9 @@ async def top_vendedores(n: int = 10):
     """Retorna os N melhores vendedores, do maior para o menor score."""
     r = get_redis()
 
-    # ZREVRANGE: retorna membros em ordem decrescente de score (maior primeiro)
-    # WITHSCORES: inclui os scores na resposta
-    top = await r.zrevrange(RANKING_KEY, 0, n - 1, withscores=True)
+    # ZRANGE com REV=True: ordem decrescente (maior score primeiro) — Redis 6.2+
+    # zrevrange() ainda funciona mas foi depreciado no Redis 7.0
+    top = await r.zrange(RANKING_KEY, 0, n - 1, desc=True, withscores=True)
 
     resultado = [
         {"posicao": i + 1, "vendedor": vendedor, "total": score}
@@ -652,6 +653,7 @@ async def posicao_vendedor(vendedor_id: str):
     r = get_redis()
 
     # ZREVRANK: posição no ranking decrescente (0 = primeiro lugar)
+    # Alternativa moderna: r.zrank(RANKING_KEY, vendedor_id, desc=True)
     posicao = await r.zrevrank(RANKING_KEY, vendedor_id)
     score = await r.zscore(RANKING_KEY, vendedor_id)
 
@@ -966,6 +968,27 @@ async def ouvir_pedidos():
             if evento["tipo"] == "pedido_confirmado":
                 await decrementar_estoque(evento["pedido_id"])
 ```
+
+> **Limitação crítica do Pub/Sub:** mensagens publicadas enquanto um subscriber está offline são **perdidas permanentemente** — o Pub/Sub não persiste mensagens. Se resiliência e reprocessamento são necessários, use **Redis Streams** (`XADD`/`XREAD`) ou uma solução dedicada como Kafka/RabbitMQ.
+
+**Redis Streams — alternativa persistente ao Pub/Sub:**
+
+```python
+# Produtor: adiciona evento ao stream (persiste no Redis)
+await r.xadd("stream:pedidos", {
+    "tipo": "pedido_confirmado",
+    "pedido_id": pedido_id,
+})
+
+# Consumidor: lê eventos a partir de um ID (pode reler eventos perdidos)
+entradas = await r.xread({"stream:pedidos": "$"}, block=0)
+for stream, mensagens in entradas:
+    for msg_id, campos in mensagens:
+        await processar_evento(campos)
+        await r.xack("stream:pedidos", "grupo-estoque", msg_id)
+```
+
+Streams também suportam **Consumer Groups** — múltiplos consumidores dividindo o trabalho, com confirmação de processamento e reentrega automática de mensagens não confirmadas.
 
 ---
 

@@ -69,7 +69,7 @@ Cada imagem de SO no EC2 tem um usuário padrão pré-configurado:
 | Ubuntu | `ubuntu` |
 | Amazon Linux 2 | `ec2-user` |
 | Debian | `admin` |
-| CentOS | `centos` |
+| Rocky Linux / AlmaLinux | `rocky` / `ec2-user` |
 | Red Hat (RHEL) | `ec2-user` |
 
 Neste guia usamos **Ubuntu** → usuário `ubuntu`.
@@ -307,7 +307,38 @@ A AWS oferece centenas de tipos de instância. Os mais comuns para aprendizado e
 
 ---
 
-## 8. Boas Práticas de Segurança
+## 8. IAM — Identity and Access Management
+
+O **IAM** é o sistema de controle de acesso da AWS. Toda ação na AWS — criar instâncias, acessar S3, invocar Lambdas — é autorizada pelo IAM.
+
+**Conceitos fundamentais:**
+
+| Conceito | O que é |
+|---|---|
+| **User** | Identidade para pessoas (desenvolvedor, admin) |
+| **Role** | Identidade para serviços (EC2 acessa S3, Lambda acessa DynamoDB) |
+| **Policy** | Documento JSON que define permissões (o que pode fazer em quais recursos) |
+| **Group** | Conjunto de Users com as mesmas políticas |
+
+```
+Exemplo de Policy — permite apenas leitura em um bucket S3 específico:
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:ListBucket"],
+    "Resource": "arn:aws:s3:::meu-bucket/*"
+  }]
+}
+```
+
+**Regra de ouro do IAM: Princípio do Menor Privilégio.** Dê apenas as permissões estritamente necessárias. Uma instância EC2 que só lê do S3 não deve ter permissão de escrever ou deletar.
+
+> **Nunca use credenciais de root para operações do dia a dia.** A conta root tem acesso irrestrito a tudo. Crie um usuário IAM com MFA habilitado para uso cotidiano.
+
+---
+
+## 9. Boas Práticas de Segurança
 
 **Proteja o arquivo .pem:**
 - Nunca compartilhe ou cometa em repositórios

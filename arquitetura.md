@@ -292,7 +292,36 @@ Requisição → AWS Lambda → Executa função → Retorna resultado
 
 ---
 
-## 3. Como Escolher a Arquitetura Certa?
+## 3. O Teorema CAP
+
+Em sistemas distribuídos, toda decisão arquitetural é constrangida pelo **Teorema CAP** (Brewer, 2000): um sistema distribuído pode garantir no máximo **dois** dos três atributos simultaneamente.
+
+| Atributo | O que significa |
+|---|---|
+| **C — Consistency** | Toda leitura retorna o dado mais recente (ou um erro) |
+| **A — Availability** | Toda requisição recebe uma resposta (pode ser desatualizada) |
+| **P — Partition Tolerance** | O sistema continua funcionando mesmo se nós perderem comunicação entre si |
+
+Como falhas de rede (partições) são inevitáveis em sistemas distribuídos, **P é obrigatório** na prática. A escolha real é entre C e A:
+
+```
+CP — Consistência + Tolerância a Partições
+  Exemplo: HBase, MongoDB (modo estrito), sistemas bancários
+  Comportamento: em caso de partição, prefere rejeitar requisições
+                 a retornar dados potencialmente desatualizados.
+
+AP — Disponibilidade + Tolerância a Partições
+  Exemplo: Cassandra, DynamoDB, DNS
+  Comportamento: em caso de partição, continua respondendo
+                 mas pode retornar dados ligeiramente desatualizados
+                 (consistência eventual).
+```
+
+> **Por que isso importa na prática?** O Redis Cluster, por exemplo, sacrifica consistência em favor de disponibilidade durante partições — leituras podem retornar dados stale. Bancos relacionais com replicação sínccrona sacrificam disponibilidade para garantir que todos os nós vejam o mesmo dado. Entender o CAP ajuda a escolher a ferramenta certa para o grau de consistência que o seu negócio exige.
+
+---
+
+## 4. Como Escolher a Arquitetura Certa?
 
 Não existe uma resposta universal. A escolha depende de:
 
@@ -302,6 +331,6 @@ Não existe uma resposta universal. A escolha depende de:
 | **Maturidade do domínio** | Domínio incerto → monolito (fácil de refatorar). Domínio estável → microsserviços |
 | **Escala esperada** | Escala uniforme → monolito ou N-tier. Escala assimétrica → microsserviços |
 | **Maturidade de DevOps** | Sem CI/CD maduro → não use microsserviços |
-| **Requisitos de resiliência** | Falhas catastróficas são inaceitáveis → distribua e isolie |
+| **Requisitos de resiliência** | Falhas catastróficas são inaceitáveis → distribua e isole |
 
 > **Regra prática:** comece simples. A maioria dos sistemas de sucesso começa como monolito e evolui para microsserviços quando os problemas de escala e organização realmente aparecem — não antes.

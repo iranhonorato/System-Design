@@ -299,381 +299,619 @@ Em sistemas com múltiplos tipos de clientes, uma variação popular é criar **
 
 ## 5. Como Implementar
 
-### 5.1 Opções de Solução
+### 5.1 Tutorial: Criando seu Próprio API Gateway com FastAPI
 
-| Solução | Tipo | Quando usar |
-|---|---|---|
-| **Kong Gateway** | Open-source / SaaS | Microsserviços, altamente extensível via plugins |
-| **AWS API Gateway** | Managed (cloud) | Arquiteturas serverless (Lambda) na AWS |
-| **Nginx** | Reverse proxy / manual | Controle total, configuração manual, baixa complexidade |
-| **Traefik** | Open-source | Integração nativa com Docker e Kubernetes |
-| **Azure API Management** | Managed (cloud) | Ecossistema Microsoft Azure |
-| **Express Gateway** | Node.js | Projetos Node que querem um gateway customizável no próprio runtime |
+Antes de usar Kong, AWS ou Nginx como gateway, é valioso construir um do zero. Isso desmistifica o que cada ferramenta faz internamente e permite personalização total quando as soluções prontas não atendem.
 
-### 5.2 Implementação com Nginx (Simples e Direto)
+#### Por que FastAPI?
 
-O Nginx é a forma mais básica de criar um gateway — um reverse proxy com roteamento por path:
+FastAPI é assíncrono por padrão (baseado em `asyncio`), o que é ideal para um gateway: a maior parte do trabalho é I/O (esperar respostas dos serviços internos), não processamento de CPU. Um gateway síncrono bloquearia a thread enquanto espera — o FastAPI não bloqueia.
 
-**Estrutura do projeto:**
+#### Estrutura do projeto
+
 ```
-projeto/
-├── nginx/
-│   └── nginx.conf
-├── servico-usuarios/
-├── servico-pedidos/
+meu-gateway/
+├── gateway/
+│   ├── __init__.py
+│   ├── main.py          ← ponto de entrada, monta a app FastAPI
+│   ├── config.py        ← mapa de rotas (qual path vai para qual serviço)
+│   ├── proxy.py         ← lógica de encaminhar a requisição
+│   ├── auth.py          ← validação de JWT
+│   ├── rate_limit.py    ← controle de requisições por cliente
+│   └── circuit.py       ← circuit breaker simples
+├── .env
+├── requirements.txt
 └── docker-compose.yml
 ```
 
-**nginx/nginx.conf:**
-```nginx
-upstream usuarios {
-    server servico-usuarios:3001;
-}
+#### Instalação das dependências
 
-upstream pedidos {
-    server servico-pedidos:3002;
-}
-
-upstream produtos {
-    server servico-produtos:3003;
-}
-
-server {
-    listen 80;
-
-    # Rate limiting: define zona de memória compartilhada
-    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-
-    # Rota: /api/v1/usuarios/* → serviço de usuários
-    location /api/v1/usuarios/ {
-        limit_req zone=api burst=20 nodelay;
-
-        rewrite ^/api/v1/usuarios/(.*) /$1 break;
-        proxy_pass http://usuarios;
-
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Rota: /api/v1/pedidos/* → serviço de pedidos
-    location /api/v1/pedidos/ {
-        limit_req zone=api burst=20 nodelay;
-
-        rewrite ^/api/v1/pedidos/(.*) /$1 break;
-        proxy_pass http://pedidos;
-
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-    }
-
-    # Retorna 404 para rotas não mapeadas
-    location / {
-        return 404 '{"error": "Rota não encontrada"}';
-        add_header Content-Type application/json;
-    }
-}
+```bash
+pip install fastapi uvicorn httpx python-jose[cryptography] python-dotenv
 ```
 
-**docker-compose.yml:**
+- `fastapi` — framework web assíncrono
+- `uvicorn` — servidor ASGI (roda a app FastAPI)
+- `httpx` — cliente HTTP assíncrono (para encaminhar requisições aos serviços)
+- `python-jose` — validação de JWT
+- `python-dotenv` — lê variáveis de ambiente do arquivo `.env`
+
+---
+
+#### Passo 1 — config.py: o mapa de rotas
+
+Este arquivo é o "cérebro" do gateway — ele define quais URLs externas mapeiam para quais serviços internos.
+
+```python
+# gateway/config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # carrega variáveis do arquivo .env
+
+# Cada entrada define uma rota do gateway.
+# "prefix"  → prefixo de URL que o cliente usa
+# "target"  → endereço base do serviço interno
+# "strip"   → se True, remove o prefixo antes de encaminhar
+# "public"  → se True, não exige autenticação
+ROUTES = [
+    {
+        "prefix": "/api/v1/auth",
+        "target": os.getenv("AUTH_SERVICE_URL", "http://localhost:8001"),
+        "strip": True,   # /api/v1/auth/login → /login no serviço de auth
+        "public": True,  # login e registro não exigem token
+    },
+    {
+        "prefix": "/api/v1/usuarios",
+        "target": os.getenv("USUARIOS_SERVICE_URL", "http://localhost:8002"),
+        "strip": True,
+        "public": False,  # exige JWT válido
+    },
+    {
+        "prefix": "/api/v1/pedidos",
+        "target": os.getenv("PEDIDOS_SERVICE_URL", "http://localhost:8003"),
+        "strip": True,
+        "public": False,
+    },
+]
+
+# Configurações de rate limiting
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+
+# Chave pública para verificar tokens JWT
+# Em produção, busque do endpoint JWKS do seu auth server
+JWT_SECRET = os.getenv("JWT_SECRET", "chave-secreta-aqui")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+```
+
+> Separar a configuração em um arquivo próprio é fundamental: quando um serviço muda de endereço, você altera apenas o `.env`, sem tocar na lógica do gateway.
+
+---
+
+#### Passo 2 — auth.py: validação de JWT
+
+```python
+# gateway/auth.py
+from fastapi import HTTPException, Request
+from jose import jwt, JWTError
+from gateway.config import JWT_SECRET, JWT_ALGORITHM
+
+def extrair_token(request: Request) -> str:
+    """
+    Lê o header Authorization e extrai o token Bearer.
+    Lança 401 se o header não existir ou tiver formato errado.
+    """
+    auth_header = request.headers.get("Authorization")
+
+    # Verifica se o header existe
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Header Authorization ausente")
+
+    # O formato esperado é "Bearer <token>"
+    partes = auth_header.split(" ")
+    if len(partes) != 2 or partes[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Formato inválido. Use: Bearer <token>")
+
+    return partes[1]  # retorna apenas o token, sem o "Bearer"
+
+
+def validar_token(token: str) -> dict:
+    """
+    Decodifica e valida o JWT.
+    Retorna o payload (claims) se válido.
+    Lança 401 se inválido ou expirado.
+    """
+    try:
+        # jose.jwt.decode verifica:
+        #   - a assinatura (usando JWT_SECRET)
+        #   - se o token expirou (campo "exp" no payload)
+        #   - o algoritmo usado (HS256 por padrão)
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload
+
+    except JWTError as e:
+        # JWTError cobre: token adulterado, expirado, assinatura inválida
+        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
+
+
+def autenticar(request: Request) -> dict:
+    """
+    Função de conveniência: extrai + valida em um só passo.
+    Retorna o payload do JWT (contém user_id, roles, etc).
+    """
+    token = extrair_token(request)
+    return validar_token(token)
+```
+
+**Por que retornar o payload?**
+O payload do JWT contém informações como `sub` (user ID), `roles`, `email`. Após validar, o gateway injeta esses dados nos headers que encaminha ao serviço interno — assim o serviço não precisa ler nem validar o JWT de novo.
+
+---
+
+#### Passo 3 — rate_limit.py: controle de requisições
+
+```python
+# gateway/rate_limit.py
+import time
+from collections import defaultdict
+from fastapi import HTTPException, Request
+from gateway.config import RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS
+
+# Dicionário em memória: chave = IP do cliente, valor = lista de timestamps
+# defaultdict(list) cria automaticamente uma lista vazia para IPs novos
+_janelas: dict[str, list[float]] = defaultdict(list)
+
+def checar_rate_limit(request: Request) -> None:
+    """
+    Implementa o algoritmo Sliding Window (janela deslizante).
+
+    Guarda o timestamp de cada requisição e descarta as mais antigas
+    que a janela de tempo. Se o número de requisições recentes exceder
+    o limite, lança 429 Too Many Requests.
+    """
+    # Identifica o cliente pelo IP (em produção, considere usar o JWT sub)
+    client_ip = request.client.host
+    agora = time.time()
+
+    # Remove timestamps antigos (fora da janela de tempo)
+    # Exemplo: se a janela é 60s, descarta tudo antes de "agora - 60s"
+    _janelas[client_ip] = [
+        ts for ts in _janelas[client_ip]
+        if agora - ts < RATE_LIMIT_WINDOW_SECONDS
+    ]
+
+    # Conta quantas requisições existem dentro da janela atual
+    requisicoes_na_janela = len(_janelas[client_ip])
+
+    if requisicoes_na_janela >= RATE_LIMIT_REQUESTS:
+        # Calcula quando a janela vai resetar (o timestamp mais antigo + janela)
+        reset_em = int(_janelas[client_ip][0] + RATE_LIMIT_WINDOW_SECONDS)
+        raise HTTPException(
+            status_code=429,
+            detail="Limite de requisições excedido",
+            headers={
+                "X-RateLimit-Limit": str(RATE_LIMIT_REQUESTS),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(reset_em),
+                "Retry-After": str(reset_em - int(agora)),
+            }
+        )
+
+    # Registra a requisição atual
+    _janelas[client_ip].append(agora)
+```
+
+> **Limitação desta implementação:** o estado fica em memória — se o gateway tiver múltiplas instâncias, cada uma tem seu próprio contador. Para produção com múltiplas instâncias, substitua o dicionário em memória por Redis.
+
+---
+
+#### Passo 4 — circuit.py: circuit breaker simples
+
+```python
+# gateway/circuit.py
+import time
+from enum import Enum
+
+class Estado(Enum):
+    FECHADO = "fechado"      # operação normal
+    ABERTO = "aberto"        # serviço falhando, rejeita requisições
+    MEIO_ABERTO = "meio_aberto"  # testando se o serviço se recuperou
+
+class CircuitBreaker:
+    def __init__(
+        self,
+        servico: str,
+        limite_falhas: int = 5,       # quantas falhas antes de abrir
+        timeout_recovery: int = 30,   # segundos até tentar novamente
+    ):
+        self.servico = servico
+        self.limite_falhas = limite_falhas
+        self.timeout_recovery = timeout_recovery
+
+        self.estado = Estado.FECHADO
+        self.contagem_falhas = 0
+        self.ultimo_aberto_em: float | None = None
+
+    def pode_passar(self) -> bool:
+        """Retorna True se a requisição pode ser encaminhada ao serviço."""
+
+        if self.estado == Estado.FECHADO:
+            return True  # operação normal
+
+        if self.estado == Estado.ABERTO:
+            # Verifica se já passou tempo suficiente para tentar novamente
+            if time.time() - self.ultimo_aberto_em >= self.timeout_recovery:
+                self.estado = Estado.MEIO_ABERTO
+                return True  # deixa uma requisição de teste passar
+            return False  # ainda em recuperação, rejeita
+
+        if self.estado == Estado.MEIO_ABERTO:
+            return True  # uma requisição de teste
+
+    def registrar_sucesso(self) -> None:
+        """Chamado quando a requisição ao serviço retornou com sucesso."""
+        self.contagem_falhas = 0
+        self.estado = Estado.FECHADO  # serviço se recuperou
+
+    def registrar_falha(self) -> None:
+        """Chamado quando a requisição ao serviço falhou."""
+        self.contagem_falhas += 1
+
+        if self.estado == Estado.MEIO_ABERTO:
+            # Teste falhou — volta a ficar aberto
+            self.estado = Estado.ABERTO
+            self.ultimo_aberto_em = time.time()
+            return
+
+        if self.contagem_falhas >= self.limite_falhas:
+            self.estado = Estado.ABERTO
+            self.ultimo_aberto_em = time.time()
+
+# Um circuit breaker por serviço, criados na inicialização
+_breakers: dict[str, CircuitBreaker] = {}
+
+def obter_breaker(servico_url: str) -> CircuitBreaker:
+    if servico_url not in _breakers:
+        _breakers[servico_url] = CircuitBreaker(servico=servico_url)
+    return _breakers[servico_url]
+```
+
+---
+
+#### Passo 5 — proxy.py: o coração do gateway
+
+Este é o arquivo mais importante — ele encaminha a requisição original para o serviço interno e devolve a resposta ao cliente.
+
+```python
+# gateway/proxy.py
+import httpx
+from fastapi import Request, HTTPException
+from fastapi.responses import Response
+from gateway.circuit import obter_breaker
+
+# Cliente HTTP assíncrono compartilhado entre todas as requisições.
+# httpx.AsyncClient mantém um pool de conexões — muito mais eficiente
+# do que criar um novo cliente a cada requisição.
+_cliente_http = httpx.AsyncClient(timeout=10.0)
+
+
+async def encaminhar(request: Request, url_destino: str) -> Response:
+    """
+    Encaminha a requisição recebida para o serviço interno.
+
+    Preserva:
+    - método HTTP (GET, POST, PUT, DELETE, etc.)
+    - headers originais
+    - query parameters (?filtro=ativo&pagina=2)
+    - corpo da requisição (body JSON, form data, etc.)
+    """
+    breaker = obter_breaker(url_destino)
+
+    # Verifica o circuit breaker antes de tentar
+    if not breaker.pode_passar():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Serviço temporariamente indisponível (circuit breaker aberto)"
+        )
+
+    # Lê o corpo da requisição original
+    # await é necessário porque a leitura do body é assíncrona
+    body = await request.body()
+
+    # Copia os headers da requisição original, exceto "host"
+    # O header "host" deve ser o do serviço interno, não o do gateway
+    headers = {
+        chave: valor
+        for chave, valor in request.headers.items()
+        if chave.lower() != "host"
+    }
+
+    try:
+        # Faz a requisição ao serviço interno
+        resposta_interna = await _cliente_http.request(
+            method=request.method,       # GET, POST, etc.
+            url=url_destino,             # URL completa já montada
+            headers=headers,             # headers originais do cliente
+            params=request.query_params, # query string (?foo=bar)
+            content=body,                # corpo da requisição
+        )
+        breaker.registrar_sucesso()
+
+    except httpx.TimeoutException:
+        breaker.registrar_falha()
+        raise HTTPException(status_code=504, detail="Timeout ao chamar serviço interno")
+
+    except httpx.ConnectError:
+        breaker.registrar_falha()
+        raise HTTPException(status_code=502, detail="Não foi possível conectar ao serviço")
+
+    # Devolve a resposta do serviço interno diretamente ao cliente
+    # Preserva: status code, headers de resposta e body
+    return Response(
+        content=resposta_interna.content,
+        status_code=resposta_interna.status_code,
+        headers=dict(resposta_interna.headers),
+        media_type=resposta_interna.headers.get("content-type"),
+    )
+```
+
+---
+
+#### Passo 6 — main.py: juntando tudo
+
+```python
+# gateway/main.py
+import logging
+import time
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from gateway.config import ROUTES
+from gateway.auth import autenticar
+from gateway.rate_limit import checar_rate_limit
+from gateway.proxy import encaminhar
+
+# Configuração de logging — cada requisição gera uma linha no log
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+logger = logging.getLogger("gateway")
+
+app = FastAPI(title="Meu API Gateway", version="1.0.0")
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Middleware do FastAPI que adiciona os headers de CORS em todas as respostas.
+# "allow_origins" define quais domínios podem fazer requisições ao gateway.
+# Em produção, substitua o "*" pelos domínios reais do seu frontend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # domínios permitidos
+    allow_credentials=True,       # permite cookies e headers de autenticação
+    allow_methods=["*"],          # GET, POST, PUT, DELETE, etc.
+    allow_headers=["*"],          # todos os headers são permitidos
+)
+
+
+# ── Middleware de logging e tempo de resposta ─────────────────────────────────
+# Middleware é uma função que envolve TODAS as requisições.
+# "call_next" chama o próximo handler na cadeia (a rota propriamente dita).
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    inicio = time.time()
+
+    # Executa o handler da rota
+    response = await call_next(request)
+
+    duracao_ms = (time.time() - inicio) * 1000
+
+    logger.info(
+        "%s %s → %d (%.1fms) | IP: %s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duracao_ms,
+        request.client.host,
+    )
+
+    # Adiciona o tempo de resposta no header para facilitar debug
+    response.headers["X-Response-Time"] = f"{duracao_ms:.1f}ms"
+    return response
+
+
+# ── Rota catchall: captura QUALQUER path e QUALQUER método ───────────────────
+# {caminho:path} é um path parameter especial do FastAPI que captura
+# qualquer string, incluindo barras (/usuarios/42/pedidos).
+# methods=["GET","POST","PUT","DELETE","PATCH"] cobre todos os métodos REST.
+@app.api_route(
+    "/{caminho:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+)
+async def gateway_handler(caminho: str, request: Request):
+    """
+    Handler principal do gateway.
+    Recebe TODAS as requisições e decide o que fazer com cada uma.
+    """
+
+    # 1. Rate limiting — independente de autenticação
+    checar_rate_limit(request)
+
+    # 2. Encontra qual rota do config.py corresponde ao path atual
+    rota_encontrada = None
+    for rota in ROUTES:
+        if request.url.path.startswith(rota["prefix"]):
+            rota_encontrada = rota
+            break
+
+    if rota_encontrada is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Rota '{request.url.path}' não encontrada no gateway"}
+        )
+
+    # 3. Autenticação — só para rotas não públicas
+    user_payload = None
+    if not rota_encontrada["public"]:
+        user_payload = autenticar(request)  # lança 401 se inválido
+
+    # 4. Monta a URL de destino
+    # strip=True: remove o prefixo antes de encaminhar
+    # Ex: /api/v1/pedidos/123 → /123 no serviço de pedidos
+    if rota_encontrada["strip"]:
+        path_sem_prefixo = request.url.path[len(rota_encontrada["prefix"]):]
+        path_sem_prefixo = path_sem_prefixo or "/"  # garante que não fique vazio
+    else:
+        path_sem_prefixo = request.url.path
+
+    url_destino = rota_encontrada["target"].rstrip("/") + path_sem_prefixo
+
+    # 5. Injeta informações do usuário autenticado nos headers
+    # Os serviços internos podem ler esses headers sem precisar validar o JWT
+    if user_payload:
+        request.headers.__dict__["_list"].append(
+            (b"x-user-id",    str(user_payload.get("sub", "")).encode())
+        )
+        request.headers.__dict__["_list"].append(
+            (b"x-user-roles", str(user_payload.get("roles", "")).encode())
+        )
+
+    # 6. Encaminha para o serviço e retorna a resposta
+    return await encaminhar(request, url_destino)
+```
+
+> **Por que uma rota catchall?**
+> Em vez de declarar uma rota para cada endpoint de cada serviço, o gateway captura tudo e decide dinamicamente. Se você registrar um novo serviço no `config.py`, não precisa alterar o `main.py`.
+
+---
+
+#### Passo 7 — .env: variáveis de ambiente
+
+```bash
+# .env
+AUTH_SERVICE_URL=http://localhost:8001
+USUARIOS_SERVICE_URL=http://localhost:8002
+PEDIDOS_SERVICE_URL=http://localhost:8003
+
+JWT_SECRET=minha-chave-secreta-muito-longa-e-segura
+JWT_ALGORITHM=HS256
+
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=60
+```
+
+---
+
+#### Passo 8 — Executando e testando
+
+```bash
+# Rodar o gateway
+uvicorn gateway.main:app --port 8000 --reload
+
+# Testar: rota pública (sem token)
+curl http://localhost:8000/api/v1/auth/login \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@teste.com", "password": "123"}'
+
+# Testar: rota protegida (com token)
+curl http://localhost:8000/api/v1/pedidos \
+  -H "Authorization: Bearer SEU_TOKEN_JWT_AQUI"
+
+# Testar: rota inválida
+curl http://localhost:8000/api/v1/inexistente
+# → 404 {"error": "Rota '/api/v1/inexistente' não encontrada no gateway"}
+
+# Testar rate limit: execute 101 vezes rapidamente
+for i in $(seq 1 101); do
+  curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/v1/auth/ping
+done
+# Os primeiros 100 retornam 200, o 101° retorna 429
+```
+
+---
+
+#### Passo 9 — docker-compose.yml
+
 ```yaml
 version: '3.8'
 
 services:
   gateway:
-    image: nginx:alpine
+    build: .
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - "8000:8000"
+    env_file: .env
     depends_on:
+      - servico-auth
       - servico-usuarios
       - servico-pedidos
+
+  servico-auth:
+    build: ./servico-auth
+    expose:
+      - "8001"
 
   servico-usuarios:
     build: ./servico-usuarios
     expose:
-      - "3001"
+      - "8002"
 
   servico-pedidos:
     build: ./servico-pedidos
     expose:
-      - "3002"
+      - "8003"
 ```
 
-### 5.3 Implementação com Kong Gateway
-
-Kong é um gateway de produção construído sobre o Nginx, com um sistema de plugins poderoso:
-
-**docker-compose.yml com Kong:**
-```yaml
-version: '3.8'
-
-services:
-  kong-db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: kong
-      POSTGRES_USER: kong
-      POSTGRES_PASSWORD: kong
-
-  kong-migrations:
-    image: kong:3.6
-    command: kong migrations bootstrap
-    environment:
-      KONG_DATABASE: postgres
-      KONG_PG_HOST: kong-db
-      KONG_PG_PASSWORD: kong
-    depends_on:
-      - kong-db
-
-  kong:
-    image: kong:3.6
-    environment:
-      KONG_DATABASE: postgres
-      KONG_PG_HOST: kong-db
-      KONG_PG_PASSWORD: kong
-      KONG_PROXY_ACCESS_LOG: /dev/stdout
-      KONG_ADMIN_ACCESS_LOG: /dev/stdout
-      KONG_PROXY_ERROR_LOG: /dev/stderr
-      KONG_ADMIN_ERROR_LOG: /dev/stderr
-      KONG_ADMIN_LISTEN: 0.0.0.0:8001
-    ports:
-      - "80:8000"      # proxy (requisições dos clientes)
-      - "8001:8001"    # admin API (configuração)
-    depends_on:
-      - kong-migrations
-```
-
-**Configurando serviços e rotas via Admin API:**
-```bash
-# 1. Registrar o serviço interno
-curl -X POST http://localhost:8001/services \
-  --data name=servico-pedidos \
-  --data url=http://servico-pedidos:3002
-
-# 2. Criar rota para o serviço
-curl -X POST http://localhost:8001/services/servico-pedidos/routes \
-  --data "paths[]=/api/v1/pedidos" \
-  --data "strip_path=true"
-
-# 3. Habilitar plugin de autenticação JWT
-curl -X POST http://localhost:8001/services/servico-pedidos/plugins \
-  --data name=jwt
-
-# 4. Habilitar rate limiting
-curl -X POST http://localhost:8001/services/servico-pedidos/plugins \
-  --data name=rate-limiting \
-  --data config.minute=100 \
-  --data config.policy=redis \
-  --data config.redis_host=redis
-
-# 5. Habilitar CORS
-curl -X POST http://localhost:8001/plugins \
-  --data name=cors \
-  --data config.origins=https://meusite.com \
-  --data config.methods=GET,POST,PUT,DELETE \
-  --data config.headers=Authorization,Content-Type
-```
-
-**Configurando via arquivo declarativo (kong.yml):**
-```yaml
-# kong.yml — configuração como código (recomendado para produção)
-_format_version: "3.0"
-
-services:
-  - name: servico-pedidos
-    url: http://servico-pedidos:3002
-    routes:
-      - name: rota-pedidos
-        paths:
-          - /api/v1/pedidos
-        strip_path: true
-    plugins:
-      - name: jwt
-      - name: rate-limiting
-        config:
-          minute: 100
-          policy: redis
-          redis_host: redis
-
-  - name: servico-usuarios
-    url: http://servico-usuarios:3001
-    routes:
-      - name: rota-usuarios
-        paths:
-          - /api/v1/usuarios
-        strip_path: true
-    plugins:
-      - name: jwt
-      - name: rate-limiting
-        config:
-          minute: 200
-
-plugins:
-  - name: cors
-    config:
-      origins:
-        - https://meusite.com
-      methods:
-        - GET
-        - POST
-        - PUT
-        - DELETE
-      headers:
-        - Authorization
-        - Content-Type
-```
-
-### 5.4 Implementação com Node.js / Express (Gateway Customizado)
-
-Para casos onde você precisa de lógica específica no gateway, ou quer começar simples:
-
-```javascript
-// gateway.js
-const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
-const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken');
-
-const app = express();
-
-// ── Middleware de Rate Limiting ──────────────────────────────
-const limiter = rateLimit({
-  windowMs: 60 * 1000,   // 1 minuto
-  max: 100,              // 100 requisições por IP
-  message: { error: 'Muitas requisições. Tente novamente em 1 minuto.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
-
-// ── Middleware de Autenticação ───────────────────────────────
-function autenticar(req, res, next) {
-  const authHeader = req.headers['authorization'];
-
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token não fornecido' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
-  try {
-    const payload = jwt.verify(token, process.env.JWT_PUBLIC_KEY, {
-      algorithms: ['RS256'],
-      audience: process.env.JWT_AUDIENCE,
-      issuer: process.env.JWT_ISSUER,
-    });
-
-    // Injeta dados do usuário para os serviços downstream
-    req.headers['x-user-id']    = payload.sub;
-    req.headers['x-user-roles'] = (payload.permissions || []).join(',');
-
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Token inválido ou expirado' });
-  }
-}
-
-// ── Rotas Públicas (sem autenticação) ───────────────────────
-app.use('/api/v1/auth', createProxyMiddleware({
-  target: process.env.AUTH_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/v1/auth': '' },
-}));
-
-// ── Rotas Privadas (com autenticação) ───────────────────────
-app.use('/api/v1/pedidos', autenticar, createProxyMiddleware({
-  target: process.env.PEDIDOS_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/v1/pedidos': '' },
-  on: {
-    error: (err, req, res) => {
-      console.error('Erro no proxy:', err.message);
-      res.status(502).json({ error: 'Serviço indisponível' });
-    },
-  },
-}));
-
-app.use('/api/v1/usuarios', autenticar, createProxyMiddleware({
-  target: process.env.USUARIOS_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/v1/usuarios': '' },
-}));
-
-// ── Rota não encontrada ──────────────────────────────────────
-app.use((req, res) => {
-  res.status(404).json({ error: `Rota ${req.path} não encontrada` });
-});
-
-app.listen(3000, () => console.log('Gateway rodando na porta 3000'));
-```
-
-**Variáveis de ambiente (.env):**
-```bash
-JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n..."
-JWT_AUDIENCE=https://api.meuapp.com
-JWT_ISSUER=https://meutenante.auth0.com/
-
-AUTH_SERVICE_URL=http://servico-auth:4001
-PEDIDOS_SERVICE_URL=http://servico-pedidos:4002
-USUARIOS_SERVICE_URL=http://servico-usuarios:4003
-```
-
-### 5.5 Gateway com AWS API Gateway + Lambda
-
-Para arquiteturas serverless na AWS, o API Gateway gerenciado é o caminho natural:
-
-```
-Cliente
-   │
-   ▼
-AWS API Gateway
-   │
-   ├── GET  /pedidos      → Lambda: listPedidos
-   ├── POST /pedidos      → Lambda: criarPedido
-   ├── GET  /pedidos/{id} → Lambda: buscarPedido
-   └── DELETE /pedidos/{id} → Lambda: deletarPedido
-```
-
-**Configuração via AWS CDK (TypeScript):**
-```typescript
-import * as cdk from 'aws-cdk-lib';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-
-const api = new apigateway.RestApi(this, 'MinhaApi', {
-  restApiName: 'minha-api',
-  defaultCorsPreflightOptions: {
-    allowOrigins: apigateway.Cors.ALL_ORIGINS,
-    allowMethods: apigateway.Cors.ALL_METHODS,
-  },
-});
-
-// Authorizer JWT (Auth0)
-const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'Authorizer', {
-  cognitoUserPools: [userPool],
-});
-
-// Lambda handler
-const pedidosLambda = new lambda.Function(this, 'PedidosHandler', {
-  runtime: lambda.Runtime.NODEJS_20_X,
-  code: lambda.Code.fromAsset('lambda/pedidos'),
-  handler: 'index.handler',
-});
-
-// Recurso e método com autenticação
-const pedidos = api.root.addResource('pedidos');
-pedidos.addMethod('GET', new apigateway.LambdaIntegration(pedidosLambda), {
-  authorizer,
-  authorizationType: apigateway.AuthorizationType.COGNITO,
-});
+**Dockerfile do gateway:**
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY gateway/ ./gateway/
+COPY .env .
+CMD ["uvicorn", "gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ---
+
+#### Fluxo completo de uma requisição autenticada
+
+```
+Cliente: GET /api/v1/pedidos/42
+         Authorization: Bearer eyJ...
+
+         │
+         ▼
+  gateway_handler()
+         │
+  ① checar_rate_limit()  → IP tem tokens disponíveis? Continua.
+         │
+  ② loop em ROUTES       → /api/v1/pedidos casa com a 3ª rota
+         │
+  ③ autenticar()         → JWT válido? Extrai sub="user-99", roles="cliente"
+         │
+  ④ monta URL            → http://localhost:8003/42
+         │
+  ⑤ injeta headers       → X-User-ID: user-99 / X-User-Roles: cliente
+         │
+  ⑥ encaminhar()         → Circuit breaker: FECHADO, pode passar
+         │
+  ⑦ httpx.request()      → GET http://localhost:8003/42
+         │
+  ⑧ Serviço de pedidos   → recebe a requisição, lê X-User-ID do header
+         │
+         ▼
+      Response 200 {"id": 42, "status": "em_entrega"}
+         │
+         ▼
+  logging_middleware()   → "GET /api/v1/pedidos/42 → 200 (12.3ms)"
+         │
+         ▼
+  Cliente recebe a resposta
+```
 
 ## 6. Integração com Auth0
 

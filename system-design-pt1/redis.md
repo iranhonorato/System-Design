@@ -517,6 +517,10 @@ Redis + token opaco:
 
 Limitar requisições por IP ou usuário é fundamental para proteger APIs de abuso. O Redis é a escolha natural por sua atomicidade e velocidade.
 
+Existem cinco algoritmos clássicos de rate limiting (Token Bucket, Leaky Bucket, Fixed Window Counter, Sliding Window Log e Sliding Window Counter) — a comparação completa entre eles, com os trade-offs de cada um, está em `escalabilidade.md`, seção 6. Aqui implementamos o **Fixed Window Counter**, por ser o mais simples e o mais barato em memória, adequado para a maioria das APIs.
+
+> **Limitação conhecida do Fixed Window:** como o contador reseta exatamente na virada da janela, um cliente pode concentrar o limite inteiro nos últimos segundos de uma janela e o limite inteiro de novo nos primeiros segundos da seguinte — passando, por um curto período, o dobro da taxa configurada. Para a maioria dos casos de uso esse risco é aceitável em troca da simplicidade; para APIs de pagamento ou antifraude, prefira Sliding Window Log ou Sliding Window Counter (ver `escalabilidade.md`).
+
 **app/middleware/rate_limit.py:**
 
 ```python
@@ -944,6 +948,8 @@ Em um ambiente com múltiplos serviços, o Redis funciona como **infraestrutura 
                    │  Rate Limit │
                    └─────────────┘
 ```
+
+> **E quando o próprio Redis não cabe em um servidor só?** O **Redis Cluster** particiona as chaves entre múltiplos nós usando **hash slots** (16.384 slots fixos, cada chave mapeada para um deles via `CRC16(chave) % 16384`) — uma variante do mesmo princípio de **consistent hashing** explicado em `escalabilidade.md`, seção 5. A ideia central é a mesma: adicionar ou remover um nó do cluster deve remapear a menor quantidade possível de chaves, evitando uma avalanche de cache miss.
 
 **Pub/Sub para comunicação entre serviços (exemplo):**
 

@@ -255,6 +255,37 @@ Internet
 
 Na prática, muitos gateways (Kong, AWS API Gateway) também fazem load balancing. Mas conceitualmente são responsabilidades distintas.
 
+### 3.1 Por que Service Mesh não compete com o Gateway
+
+Vale entender melhor o Service Mesh, porque é o item da tabela mais frequentemente confundido com o Gateway. A ideia nasce de um problema específico dos microsserviços: cada serviço precisa de capacidades operacionais comuns — monitoramento, logging, autenticação serviço-a-serviço, circuit breaker — mas duplicar essa implementação em cada serviço (em linguagens e stacks potencialmente diferentes) é insustentável, e centralizar tudo em uma biblioteca compartilhada cria acoplamento entre times.
+
+A solução é o padrão **Sidecar**: um processo auxiliar (proxy) é implantado ao lado de **cada instância** de serviço — não na borda da rede como o Gateway, mas junto de cada serviço internamente — interceptando todo o tráfego de entrada e saída daquela instância.
+
+```
+┌────────────────────────┐     ┌────────────────────────┐
+│   Serviço de Pedidos    │     │  Serviço de Pagamentos  │
+│  ┌──────────────────┐  │     │  ┌──────────────────┐  │
+│  │  Lógica de domínio │  │     │  │  Lógica de domínio │  │
+│  └────────┬──────────┘  │     │  └────────┬──────────┘  │
+│  ┌────────▼──────────┐  │     │  ┌────────▼──────────┐  │
+│  │  Sidecar (proxy)   │◀─┼─────┼─▶│  Sidecar (proxy)   │  │
+│  └───────────────────┘  │     │  └───────────────────┘  │
+└────────────────────────┘     └────────────────────────┘
+        toda a comunicação entre serviços passa pelos sidecars
+```
+
+Quando **todo** serviço do cluster tem seu sidecar, o conjunto interconectado de proxies forma um **service mesh**: uma camada operacional consistente (o **data plane**) que pode ser configurada e observada centralmente (o **control plane** — ex.: Istio, Linkerd), sem que a lógica de domínio de cada serviço precise saber que isso existe.
+
+**Por que Gateway e Service Mesh não competem — resolvem coordenadas diferentes:**
+
+| | API Gateway | Service Mesh |
+|---|---|---|
+| Tráfego que controla | **Norte-sul** (externo → seus serviços) | **Leste-oeste** (serviço → serviço, interno) |
+| Onde vive | Borda da rede (edge), um ponto de entrada | Distribuído — um sidecar por instância |
+| Decisão de negócio | Sim (roteamento por regra de negócio, BFF) | Não — só preocupação operacional/infraestrutura |
+
+Um sistema de microsserviços maduro tipicamente usa os dois ao mesmo tempo: o Gateway lida com o tráfego que entra vindo da internet; o Service Mesh lida com a comunicação interna entre os serviços por trás dele.
+
 ---
 
 ## 4. Padrão BFF (Backend for Frontend)
@@ -294,6 +325,8 @@ Em sistemas com múltiplos tipos de clientes, uma variação popular é criar **
 - O mobile precisa de respostas menores (economizar banda e bateria)
 - O web pode se dar ao luxo de dados mais ricos e múltiplas chamadas agregadas
 - Um único Gateway genérico acaba servindo mal todos os clientes
+
+> **BFF é, na prática, um orquestrador.** Quando um BFF chama `Serv. Users`, `Serv. Pedidos` e `Serv. Produtos` e agrega as três respostas em um único payload para o cliente, ele está implementando o estilo de comunicação **orquestrado** (em oposição ao **coreografado**, onde os serviços reagiriam a eventos uns dos outros sem um coordenador central) — o mesmo vocabulário usado em `arquitetura.md`, seção 6.4, para descrever os padrões de Saga. Isso tem uma consequência prática direta: assim como um orquestrador de Saga, o BFF concentra o conhecimento do workflow (quais serviços chamar, em que ordem, o que fazer se um deles falhar), o que o torna um ponto central de complexidade — e, potencialmente, um gargalo de responsividade se as chamadas aos serviços de origem forem seriais em vez de paralelas.
 
 ---
 

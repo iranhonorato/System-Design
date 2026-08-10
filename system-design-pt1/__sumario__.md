@@ -23,10 +23,11 @@ QUALIDADE E ENTREGA
          │
          ▼
 FERRAMENTAS E ESPECIALIZAÇÃO
-  ⑩ redis.md
-  ⑪ seguranca.md
-  ⑫ auth0.md
-  ⑬ api_gateway.md
+  ⑩ escalabilidade.md
+  ⑪ redis.md
+  ⑫ seguranca.md
+  ⑬ auth0.md
+  ⑭ api_gateway.md
 ```
 
 ---
@@ -45,7 +46,7 @@ Explica o que sustenta qualquer software antes de uma linha de código rodar. Co
 
 **Pré-requisito:** ① infraestrutura.md
 
-Apresenta os padrões de organização de sistemas: arquiteturas clássicas (monolítica, em camadas N-Tier, cliente-servidor), arquiteturas modernas (microsserviços, orientada a eventos, serverless, orientada a APIs) e como escolher a certa para cada contexto. Inclui o **Teorema CAP** — a lei fundamental dos sistemas distribuídos que governa a escolha entre consistência e disponibilidade.
+Apresenta os padrões de organização de sistemas: o vocabulário formal de **características de arquitetura** (as "-ilities"), as arquiteturas clássicas (monolítica, em camadas N-Tier, cliente-servidor), o conceito de **quantum de arquitetura** e acoplamento estático/dinâmico, um catálogo completo de arquiteturas modernas (microsserviços, orientada a eventos com as topologias broker e mediator, serverless, orientada a APIs, pipeline, microkernel e service-based), o **Teorema CAP** — a lei fundamental dos sistemas distribuídos que governa a escolha entre consistência e disponibilidade — e como sistemas reais mantêm consistência de dados sem transações distribuídas (ownership, ACID vs. BASE, e os 8 padrões de Saga). Fecha com o formato de **Architecture Decision Record (ADR)** para documentar decisões.
 
 > Leia antes de qualquer discussão sobre microsserviços ou sistemas distribuídos. Sem esse mapa mental, decisões arquiteturais parecem arbitrárias.
 
@@ -121,19 +122,29 @@ Hands-on de CD: estende o pipeline do arquivo anterior para fazer deploy automá
 
 ---
 
-## ⑩ [redis.md](redis.md)
+## ⑩ [escalabilidade.md](escalabilidade.md)
 
-**Pré-requisito:** ⑤ threads_e_sockets.md, ② arquitetura.md
+**Pré-requisito:** ② arquitetura.md, ⑤ threads_e_sockets.md
 
-Cobre o Redis de ponta a ponta: por que dados em RAM são ordens de magnitude mais rápidos, as estruturas de dados nativas (String, Hash, List, Set, Sorted Set), persistência (RDB vs AOF), TTL e expiração de chaves. Implementa cinco casos de uso reais em Python/FastAPI: cache de produtos, sessões de usuário, rate limiting, leaderboard em tempo real e filas de processamento assíncrono. Inclui a distinção crítica entre Pub/Sub e **Redis Streams** para sistemas orientados a eventos.
+Aprofunda a característica de arquitetura "escalabilidade" com as técnicas concretas usadas para levar um sistema de um usuário a milhões: escala vertical vs. horizontal, **Load Balancer** (algoritmos e L4 vs. L7), replicação de banco de dados (master-slave), **CDN**, **sharding e Consistent Hashing** (o problema do hash ingênuo, o anel de hash, nós virtuais) e os cinco algoritmos de **Rate Limiting** (Token Bucket, Leaky Bucket, Fixed Window, Sliding Window Log e Sliding Window Counter) com seus trade-offs.
+
+> Leia antes do Redis — os casos de uso de cache, rate limiting e cluster do próximo arquivo fazem muito mais sentido com esse vocabulário de escalabilidade já estabelecido.
+
+---
+
+## ⑪ [redis.md](redis.md)
+
+**Pré-requisito:** ⑤ threads_e_sockets.md, ② arquitetura.md, ⑩ escalabilidade.md
+
+Cobre o Redis de ponta a ponta: por que dados em RAM são ordens de magnitude mais rápidas, as estruturas de dados nativas (String, Hash, List, Set, Sorted Set), persistência (RDB vs AOF), TTL e expiração de chaves. Implementa cinco casos de uso reais em Python/FastAPI: cache de produtos, sessões de usuário, rate limiting, leaderboard em tempo real e filas de processamento assíncrono. Inclui a distinção crítica entre Pub/Sub e **Redis Streams** para sistemas orientados a eventos, e como o Redis Cluster aplica consistent hashing (hash slots) para escalar horizontalmente.
 
 > Leia quando precisar entender cache, sessões, filas leves ou comunicação entre serviços. O Redis aparece como componente em quase todo sistema de médio porte.
 
 ---
 
-## ⑪ [seguranca.md](seguranca.md)
+## ⑫ [seguranca.md](seguranca.md)
 
-**Pré-requisito:** ② arquitetura.md, ⑤ threads_e_sockets.md, ⑩ redis.md
+**Pré-requisito:** ② arquitetura.md, ⑤ threads_e_sockets.md, ⑪ redis.md
 
 O guia mais denso do projeto. Separa e aprofunda os três conceitos: **autenticação** (fatores, MFA, TOTP), **tokens** (JWT vs session, Access + Refresh Token, onde armazenar no frontend), **armazenamento de senhas** (por que MD5 é inseguro, rainbow tables, salt, BCrypt vs Argon2id), **autorização** (RBAC vs ABAC, princípio do menor privilégio), **ataques** (SQL Injection, XSS, CSRF, Brute Force, IDOR) com prevenção em código, HTTPS/TLS, OWASP Top 10 e um checklist de produção.
 
@@ -141,9 +152,9 @@ O guia mais denso do projeto. Separa e aprofunda os três conceitos: **autentica
 
 ---
 
-## ⑫ [auth0.md](auth0.md)
+## ⑬ [auth0.md](auth0.md)
 
-**Pré-requisito:** ⑪ seguranca.md
+**Pré-requisito:** ⑫ seguranca.md
 
 Aplica os conceitos do arquivo anterior em uma solução concreta: o Auth0, plataforma de identidade como serviço. Explica o que o Auth0 resolve (e o que não resolve), os fluxos OAuth 2.0 e OpenID Connect, como o Authorization Code Flow funciona passo a passo, e como implementar autenticação completa em React (frontend), Node.js/Express e Python/FastAPI. Cobre recursos avançados: Actions para customizar tokens, RBAC no painel, e SSO entre aplicações.
 
@@ -151,11 +162,11 @@ Aplica os conceitos do arquivo anterior em uma solução concreta: o Auth0, plat
 
 ---
 
-## ⑬ [api_gateway.md](api_gateway.md)
+## ⑭ [api_gateway.md](api_gateway.md)
 
-**Pré-requisito:** ② arquitetura.md, ⑩ redis.md, ⑫ auth0.md
+**Pré-requisito:** ② arquitetura.md, ⑩ escalabilidade.md, ⑪ redis.md, ⑬ auth0.md
 
-Fecha o ciclo de microsserviços com o componente que unifica tudo: o API Gateway. Explica o problema de expor múltiplos serviços diretamente (clientes precisariam conhecer cada endereço), as responsabilidades que o Gateway centraliza (roteamento, autenticação, rate limiting, SSL termination, circuit breaker), a diferença entre Gateway, Load Balancer e Service Mesh, e o padrão **BFF** (Backend for Frontend). Implementa com Nginx, Kong e Node.js/Express, e mostra como o Gateway e o Auth0 se complementam.
+Fecha o ciclo de microsserviços com o componente que unifica tudo: o API Gateway. Explica o problema de expor múltiplos serviços diretamente (clientes precisariam conhecer cada endereço), as responsabilidades que o Gateway centraliza (roteamento, autenticação, rate limiting, SSL termination, circuit breaker), a diferença entre Gateway, Load Balancer e **Service Mesh** (o padrão Sidecar, data plane vs. control plane, tráfego norte-sul vs. leste-oeste), e o padrão **BFF** (Backend for Frontend) como um orquestrador de workflow. Implementa com Nginx, Kong e Node.js/Express, e mostra como o Gateway e o Auth0 se complementam.
 
 > Leia para entender como as peças se conectam em uma arquitetura de microsserviços real: Auth0 emite tokens → Gateway valida → serviços internos processam.
 
@@ -166,11 +177,11 @@ Fecha o ciclo de microsserviços com o componente que unifica tudo: o API Gatewa
 ```
 infraestrutura
       │
-      ├──▶ arquitetura ──▶ threads_e_sockets ──▶ redis ──▶ api_gateway
-      │         │                                  │
-      │         └──────────────────────────────────┴──▶ autenticação
-      │                                                       │
-      ├──▶ docker ──▶ aws ──▶ testes ──▶ ci_intro            └──▶ auth0
+      ├──▶ arquitetura ──▶ threads_e_sockets ──▶ escalabilidade ──▶ redis ──▶ api_gateway
+      │         │                                                     │
+      │         └─────────────────────────────────────────────────────┴──▶ autenticação
+      │                                                                          │
+      ├──▶ docker ──▶ aws ──▶ testes ──▶ ci_intro                              └──▶ auth0
       │                           │          │
       │                           └──────────┴──▶ ci_hands_on ──▶ cd_hands_on
       │
@@ -184,12 +195,14 @@ infraestrutura
 | Quero entender... | Leia |
 |---|---|
 | O que é infraestrutura e como a cloud funciona | ①, ④ |
-| Monolito vs microsserviços vs serverless | ② |
+| Monolito vs microsserviços vs serverless vs demais estilos | ② |
+| Características de arquitetura, quantum, CAP e consistência de dados (Saga) | ② |
 | Docker e containers | ③ |
 | Como programas se comunicam em rede | ⑤ |
 | Como testar meu código corretamente | ⑥ |
 | Como automatizar deploys | ⑦, ⑧, ⑨ |
-| Cache, filas e sessões rápidas | ⑩ |
-| Login, senhas e segurança | ⑪ |
-| Implementar autenticação com Auth0 | ⑫ |
-| Centralizar e proteger APIs | ⑬ |
+| Load Balancer, CDN, sharding, consistent hashing e rate limiting | ⑩ |
+| Cache, filas e sessões rápidas | ⑪ |
+| Login, senhas e segurança | ⑫ |
+| Implementar autenticação com Auth0 | ⑬ |
+| Centralizar e proteger APIs, e a diferença para Service Mesh | ⑭ |

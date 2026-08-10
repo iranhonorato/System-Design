@@ -1,4 +1,4 @@
-# Arquitetura de Software
+# System Design
 
 Este repositório é um guia de estudo sobre como sistemas de software são projetados para funcionar, escalar e se manter — da infraestrutura que sustenta uma aplicação até as decisões que definem como seus componentes se organizam, se comunicam e continuam confiáveis sob carga. A proposta é organizar esses conceitos de forma progressiva e didática, com diagramas, tabelas e exemplos práticos em Python/FastAPI, permitindo compreender não só *o que* cada peça faz, mas *por que* ela existe e qual problema motivou sua criação.
 

@@ -60,7 +60,7 @@ Assim que existe mais de um servidor atendendo o mesmo tráfego, alguém precisa
 ### Camada 4 vs. Camada 7
 
 - **L4 (transporte):** decide o roteamento olhando só IP e porta, sem inspecionar o conteúdo da requisição. Mais rápido, porque não decodifica o protocolo de aplicação.
-- **L7 (aplicação):** entende HTTP — pode rotear por path (`/api/pagamentos` → serviço de pagamentos), por header, por cookie. É o que um **API Gateway** faz por baixo, e por isso os dois componentes frequentemente se confundem (a distinção conceitual entre eles está detalhada em `api_gateway.md`, seção 3).
+- **L7 (aplicação):** entende HTTP — pode rotear por path (`/api/pagamentos` → serviço de pagamentos), por header, por cookie. É o que um **API Gateway** faz por baixo, e por isso os dois componentes frequentemente se confundem (a distinção conceitual entre eles está detalhada em `../system-design-pt2/load_balancer_vs_nginx_vs_api_gateway.md`).
 
 ---
 

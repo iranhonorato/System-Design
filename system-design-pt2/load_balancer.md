@@ -256,7 +256,7 @@ O load balancer resolve o SPOF da camada de aplicação e, ingenuamente configur
 | **Hardware** | F5 BIG-IP, Citrix ADC | Desempenho extremo; caro; comum em ambientes on-premise legados |
 | **Client-side** | gRPC balancer, Ribbon, service mesh (`sidecar`) | Sem salto extra na rede; exige *service discovery* e lógica no cliente |
 
-O **balanceamento client-side** é conceitualmente o mais diferente: em vez de um intermediário, o próprio chamador descobre a lista de instâncias disponíveis (via *service discovery*) e escolhe uma. Elimina um salto de rede e o gargalo central, ao custo de embutir a lógica de balanceamento em cada cliente — problema que o padrão *Sidecar* resolve ao delegar essa lógica a um proxy local, exatamente como descrito em `../system-design-pt1/api_gateway.md`, seção 3.1.
+O **balanceamento client-side** é conceitualmente o mais diferente: em vez de um intermediário, o próprio chamador descobre a lista de instâncias disponíveis (via *service discovery*) e escolhe uma. Elimina um salto de rede e o gargalo central, ao custo de embutir a lógica de balanceamento em cada cliente — problema que o padrão *Sidecar* resolve ao delegar essa lógica a um proxy local, exatamente como descrito em `api_gateway.md`, seção 1.
 
 ---
 

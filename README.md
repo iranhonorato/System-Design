@@ -18,8 +18,16 @@ Este projeto não é uma aplicação de software em execução, mas sim uma base
 - escalabilidade de sistemas distribuídos (load balancer, replicação, CDN, sharding, consistent hashing, rate limiting);
 - Redis (estruturas de dados, cache, sessões, filas, Pub/Sub vs. Streams);
 - segurança (autenticação, tokens, armazenamento de senhas, autorização, ataques comuns, OWASP);
-- Auth0 e OAuth 2.0/OpenID Connect;
-- API Gateway (roteamento, rate limiting, circuit breaker, Service Mesh, padrão BFF).
+- Auth0 e OAuth 2.0/OpenID Connect.
+
+Na pasta [system-design-pt2/](system-design-pt2/), a trilha continua pelos componentes de borda e pela camada de dados:
+
+- escala horizontal vs. vertical (o pré-requisito *stateless*, escalabilidade vs. elasticidade);
+- load balancer (L4 vs. L7, algoritmos, health checks, redundância);
+- Nginx (proxy reverso, balanceamento, TLS, cache, rate limiting);
+- API Gateway (acoplamento ortogonal, responsabilidades e antipadrões);
+- a diferença entre load balancer, Nginx e API Gateway;
+- replicação master/slave (replication lag, failover, split-brain, limites do modelo).
 
 A ideia central é construir uma visão integral de como um sistema nasce simples e vai adquirindo, camada por camada, a infraestrutura, a arquitetura, os processos e as ferramentas que permitem que ele cresça sem desmoronar.
 
@@ -36,11 +44,13 @@ Não é pré-requisito nenhum conhecimento prévio de arquitetura: o primeiro ar
 
 ## Como utilizar
 
-A leitura recomendada começa por [system-design-pt1/\_\_sumario\_\_.md](system-design-pt1/__sumario__.md), que organiza os temas em uma ordem lógica de aprendizado, com um mapa de dependências entre arquivos e uma tabela de referência rápida por assunto. O material foi pensado para ser lido sequencialmente — cada arquivo assume o vocabulário dos anteriores — mas também pode ser consultado por assunto conforme a necessidade.
+A leitura recomendada começa por [system-design-pt1/\_\_sumario\_\_.md](system-design-pt1/__sumario__.md) e segue por [system-design-pt2/\_\_sumario\_\_.md](system-design-pt2/__sumario__.md). Cada sumário organiza os temas em uma ordem lógica de aprendizado, com um mapa de dependências entre arquivos e uma tabela de referência rápida por assunto. O material foi pensado para ser lido sequencialmente — cada arquivo assume o vocabulário dos anteriores — mas também pode ser consultado por assunto conforme a necessidade.
+
+Os arquivos da parte 2 marcam explicitamente as **confusões comuns de aprendizado** no formato `Confusão comum → Mais preciso`, porque boa parte da dificuldade nesses temas não vem de desconhecer o conceito, e sim de tê-lo aprendido com uma imprecisão que só aparece em produção.
 
 ## Estrutura do conteúdo
 
-O repositório está dividido em três blocos temáticos, na ordem de leitura sugerida:
+O repositório está dividido em quatro blocos temáticos, na ordem de leitura sugerida:
 
 **Fundamentos**
 - [system-design-pt1/infraestrutura.md](system-design-pt1/infraestrutura.md) — o que sustenta qualquer software antes do código rodar.
@@ -60,7 +70,14 @@ O repositório está dividido em três blocos temáticos, na ordem de leitura su
 - [system-design-pt1/redis.md](system-design-pt1/redis.md) — cache, sessões, filas e comunicação entre serviços.
 - [system-design-pt1/seguranca.md](system-design-pt1/seguranca.md) — autenticação, senhas, autorização e os ataques mais comuns.
 - [system-design-pt1/auth0.md](system-design-pt1/auth0.md) — autenticação como serviço, na prática.
-- [system-design-pt1/api_gateway.md](system-design-pt1/api_gateway.md) — o componente que unifica o acesso a um sistema de microsserviços.
+
+**Borda e Camada de Dados** (parte 2)
+- [system-design-pt2/escalabilidade_horizontal_vs_vertical.md](system-design-pt2/escalabilidade_horizontal_vs_vertical.md) — a decisão que condiciona todas as outras.
+- [system-design-pt2/load_balancer.md](system-design-pt2/load_balancer.md) — o componente que a escala horizontal torna obrigatório.
+- [system-design-pt2/nginx.md](system-design-pt2/nginx.md) — o produto que implementa proxy reverso, balanceamento, TLS e cache.
+- [system-design-pt2/api_gateway.md](system-design-pt2/api_gateway.md) — o papel arquitetural que governa a entrada da API.
+- [system-design-pt2/load_balancer_vs_nginx_vs_api_gateway.md](system-design-pt2/load_balancer_vs_nginx_vs_api_gateway.md) — por que comparar os três diretamente é um erro de categoria.
+- [system-design-pt2/arquitetura_master_slave.md](system-design-pt2/arquitetura_master_slave.md) — a única camada que não pode ser tornada *stateless*.
 
 ## Conclusão
 

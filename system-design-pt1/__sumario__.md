@@ -27,8 +27,9 @@ FERRAMENTAS E ESPECIALIZAÇÃO
   ⑪ redis.md
   ⑫ seguranca.md
   ⑬ auth0.md
-  ⑭ api_gateway.md
 ```
+
+> **Continua na parte 2:** os componentes de borda (load balancer, Nginx, API Gateway) e a camada de dados (replicação master/slave) estão em [../system-design-pt2/\_\_sumario\_\_.md](../system-design-pt2/__sumario__.md).
 
 ---
 
@@ -162,22 +163,12 @@ Aplica os conceitos do arquivo anterior em uma solução concreta: o Auth0, plat
 
 ---
 
-## ⑭ [api_gateway.md](api_gateway.md)
-
-**Pré-requisito:** ② arquitetura.md, ⑩ escalabilidade.md, ⑪ redis.md, ⑬ auth0.md
-
-Fecha o ciclo de microsserviços com o componente que unifica tudo: o API Gateway. Explica o problema de expor múltiplos serviços diretamente (clientes precisariam conhecer cada endereço), as responsabilidades que o Gateway centraliza (roteamento, autenticação, rate limiting, SSL termination, circuit breaker), a diferença entre Gateway, Load Balancer e **Service Mesh** (o padrão Sidecar, data plane vs. control plane, tráfego norte-sul vs. leste-oeste), e o padrão **BFF** (Backend for Frontend) como um orquestrador de workflow. Implementa com Nginx, Kong e Node.js/Express, e mostra como o Gateway e o Auth0 se complementam.
-
-> Leia para entender como as peças se conectam em uma arquitetura de microsserviços real: Auth0 emite tokens → Gateway valida → serviços internos processam.
-
----
-
 ## Mapa de Dependências
 
 ```
 infraestrutura
       │
-      ├──▶ arquitetura ──▶ threads_e_sockets ──▶ escalabilidade ──▶ redis ──▶ api_gateway
+      ├──▶ arquitetura ──▶ threads_e_sockets ──▶ escalabilidade ──▶ redis
       │         │                                                     │
       │         └─────────────────────────────────────────────────────┴──▶ autenticação
       │                                                                          │
@@ -205,4 +196,4 @@ infraestrutura
 | Cache, filas e sessões rápidas | ⑪ |
 | Login, senhas e segurança | ⑫ |
 | Implementar autenticação com Auth0 | ⑬ |
-| Centralizar e proteger APIs, e a diferença para Service Mesh | ⑭ |
+| Load balancer, Nginx, API Gateway e replicação de banco | [parte 2](../system-design-pt2/__sumario__.md) |

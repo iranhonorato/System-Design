@@ -58,9 +58,9 @@ O primeiro **produto** da trilha — os anteriores eram conceitos. Cobre os quat
 
 ## ④ [api_gateway.md](api_gateway.md)
 
-**Pré-requisito:** ②, ③, `../system-design-pt1/api_gateway.md`
+**Pré-requisito:** ②, ③, `../system-design-pt1/arquitetura.md`, `../system-design-pt1/seguranca.md`
 
-Complementa o arquivo homônimo da parte 1 — que continua sendo a referência de **implementação**, com o tutorial completo em FastAPI. Aqui o gateway é examinado como **decisão de arquitetura**: a motivação profunda (o **acoplamento ortogonal** de *The Hard Parts*), o gateway como mecanismo de **indireção**, suas responsabilidades legítimas, e — o ponto mais categórico dos livros — **o que ele não deve fazer**, com o alerta contra reproduzir o ESB da era SOA. Trata ainda da separação autenticação/autorização, de por que o gateway **não é uma fronteira de confiança**, e de seu papel como SPOF e gargalo.
+O gateway examinado como **decisão de arquitetura**: a motivação profunda (o **acoplamento ortogonal** de *The Hard Parts*), o padrão **Sidecar e o Service Mesh** como a resposta complementar para o tráfego interno, o gateway como mecanismo de **indireção**, suas responsabilidades legítimas, e — o ponto mais categórico dos livros — **o que ele não deve fazer**, com o alerta contra reproduzir o ESB da era SOA. Trata ainda do padrão **BFF** como o lugar onde agregação legitimamente mora, da separação autenticação/autorização, de por que o gateway **não é uma fronteira de confiança**, e de seu papel como SPOF e gargalo.
 
 > **Confusões tratadas:** "todo microsserviço precisa de gateway"; "o gateway resolve o problema de chamar 5 endpoints"; "o gateway é o lugar das regras de acesso"; "com o gateway validando tokens, os serviços não precisam se preocupar"; "gateway gerenciado não tem limites"; "Ingress do Kubernetes é um API Gateway".
 
@@ -100,9 +100,8 @@ A última camada do caminho da requisição — e a única que não pode ser tor
                            │              ▼
                            └──▶ ③ nginx ──┐
                                           ├──▶ ⑤ load_balancer_vs_nginx_vs_api_gateway
-   api_gateway.md ─────────────▶ ④ api_gateway ──┘
+   seguranca.md ───────────────▶ ④ api_gateway ──┘
    redis.md ──────────────────────┘
-   seguranca.md ──────────────────┘
 ```
 
 ---
@@ -139,5 +138,5 @@ Esta parte **aprofunda** temas que a parte 1 apresentou em visão geral. Onde h�
 | Escalabilidade | Panorama das técnicas (CDN, sharding, consistent hashing, rate limiting) | A decisão vertical vs. horizontal em profundidade |
 | Load balancer | Conceito e três algoritmos | Estrutura, L4/L7, oito algoritmos, health checks, redundância |
 | Nginx | Modelo de concorrência (`../system-design-pt1/threads_e_sockets.md`) | O produto inteiro: configuração, papéis e armadilhas |
-| API Gateway | Implementação completa em FastAPI, BFF, Service Mesh | A decisão arquitetural, os limites e os antipadrões |
+| API Gateway | — (o tema saiu da parte 1) | O arquivo inteiro: decisão arquitetural, Sidecar/Service Mesh, BFF, limites e antipadrões |
 | Master/slave | Meia página em `../system-design-pt1/escalabilidade.md` | O arquivo inteiro |

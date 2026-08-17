@@ -1,6 +1,6 @@
 # API Gateway
 
-**Pré-requisito:** `load_balancer.md`, `nginx.md`, `../system-design-pt1/api_gateway.md`
+**Pré-requisito:** `load_balancer.md`, `nginx.md`, `../system-design-pt1/arquitetura.md`, `../system-design-pt1/seguranca.md`
 
 > Baseado no Capítulo 17 (*Microservices Architecture*, seções **API Layer** e **Operational Reuse**) de **Fundamentals of Software Architecture** e no Capítulo 8 (*Reuse Patterns* — **Sidecars and Service Mesh**, **Orthogonal Coupling**) de **Software Architecture: The Hard Parts**.
 
@@ -8,9 +8,9 @@
 
 ## Por que este arquivo existe
 
-`../system-design-pt1/api_gateway.md` cobre o gateway de forma prática e extensa: o ciclo de vida da requisição, autenticação centralizada, rate limiting, circuit breaker, o padrão BFF e um tutorial completo construindo um gateway em FastAPI. **Aquele arquivo continua sendo a referência de implementação** — nada aqui o substitui.
+Os dois arquivos anteriores cobriram o caminho da requisição até a aplicação: quem distribui a carga e qual produto implementa essa distribuição. Falta a peça que responde por uma pergunta diferente — **não "para qual máquina isto vai?", mas "esta requisição pode entrar?"**.
 
-Este arquivo faz outra coisa: examina o gateway como **decisão de arquitetura**. Por que ele existe do ponto de vista de acoplamento, o que os livros dizem explicitamente que ele **não** deve fazer, e quais confusões conceituais fazem equipes transformarem o gateway no componente mais problemático do sistema. É o preparo direto para o arquivo seguinte, que compara os três componentes de borda desta trilha.
+Esse é o API Gateway, e ele é o componente de borda mais fácil de adotar errado. Este arquivo o examina como **decisão de arquitetura**: por que ele existe do ponto de vista de acoplamento, quais responsabilidades legitimamente lhe pertencem, o que os livros dizem explicitamente que ele **não** deve fazer, e quais confusões conceituais fazem equipes transformarem o gateway no componente mais problemático do sistema. É também o preparo direto para o arquivo seguinte, que compara os três componentes de borda desta trilha.
 
 ---
 
@@ -54,7 +54,38 @@ O livro coloca a pergunta que dá origem ao gateway: *se cada equipe implementa 
       • Sidecar/Mesh → distribui JUNTO A CADA serviço (tráfego interno)
 ```
 
-Essa é a leitura que torna gateway e service mesh compreensíveis de uma vez: **são duas respostas ao mesmo problema de acoplamento ortogonal, aplicadas a eixos de tráfego diferentes** — norte-sul (externo→interno) e leste-oeste (interno→interno). O detalhamento dessa comparação está em `../system-design-pt1/api_gateway.md`, seção 3.1.
+Essa é a leitura que torna gateway e service mesh compreensíveis de uma vez: **são duas respostas ao mesmo problema de acoplamento ortogonal, aplicadas a eixos de tráfego diferentes** — norte-sul (externo→interno) e leste-oeste (interno→interno).
+
+### A outra resposta: Sidecar e Service Mesh
+
+Vale detalhar a alternativa, porque ela é o item mais frequentemente confundido com o gateway. A ideia parte do mesmo impasse: cada serviço precisa de capacidades operacionais comuns, mas duplicar essa implementação em cada serviço (em linguagens e stacks potencialmente diferentes) é insustentável, e centralizá-la numa biblioteca compartilhada recria o acoplamento entre equipes que os microsserviços queriam eliminar.
+
+A solução é o padrão **Sidecar** — nome tirado do sidecar de motocicleta. Um processo auxiliar (um proxy) é implantado ao lado de **cada instância** de serviço, não na borda da rede, interceptando todo o tráfego de entrada e saída daquela instância:
+
+```
+┌─────────────────────────┐        ┌─────────────────────────┐
+│   Serviço de Pedidos     │        │  Serviço de Pagamentos   │
+│  ┌───────────────────┐  │        │  ┌───────────────────┐  │
+│  │  Lógica de domínio │  │        │  │  Lógica de domínio │  │
+│  └─────────┬─────────┘  │        │  └─────────┬─────────┘  │
+│  ┌─────────▼─────────┐  │        │  ┌─────────▼─────────┐  │
+│  │  Sidecar (proxy)   │◀─┼────────┼─▶│  Sidecar (proxy)   │  │
+│  └───────────────────┘  │        │  └───────────────────┘  │
+└─────────────────────────┘        └─────────────────────────┘
+     mTLS, retry, circuit breaker, métricas e logs vivem aqui —
+     a lógica de domínio não sabe que isso existe
+```
+
+*The Hard Parts* descreve a consequência: se arquitetos e operações podem assumir com segurança que **todo** serviço inclui o sidecar, o conjunto interconectado de proxies forma um **service mesh** — uma camada operacional consistente (o **data plane**), configurável e observável de forma centralizada (o **control plane** — Istio, Linkerd). O livro destaca o ganho de governança: sem o mesh, unificar a organização em torno de uma solução comum de monitoramento exige que cada equipe construa a sua; com o mesh, a mudança acontece em um lugar.
+
+| | **API Gateway** | **Service Mesh** |
+|---|---|---|
+| Tráfego que controla | **Norte-sul** (externo → seus serviços) | **Leste-oeste** (serviço → serviço) |
+| Onde vive | Borda da rede, um ponto de entrada | Distribuído — um sidecar por instância |
+| Decisão de negócio | Sim (roteamento por regra, versão de API) | Não — só preocupação operacional |
+| Conhece o consumidor final | Sim (chave, plano, quota) | Não — conhece serviços, não clientes |
+
+Os dois não competem: um sistema de microsserviços maduro usa ambos ao mesmo tempo. O gateway trata o que entra vindo da internet; o mesh trata a comunicação interna por trás dele — exatamente o ponto retomado na seção 5.
 
 ---
 
@@ -117,7 +148,31 @@ LEGÍTIMO                                PROBLEMÁTICO
                                          calcule o total com desconto"
 ```
 
-O terceiro caso do lado direito é o mais sutil, porque agregação é útil de verdade — e é exatamente por isso que existe o padrão **BFF (Backend for Frontend)**, detalhado em `../system-design-pt1/api_gateway.md`, seção 4. A diferença não é técnica, é de **posicionamento e propriedade**: um BFF é um serviço próprio, versionado e mantido pela equipe daquele cliente, que pode conter lógica de composição; o gateway é infraestrutura compartilhada, e lógica de negócio dentro dele não tem dono claro.
+O terceiro caso do lado direito é o mais sutil, porque agregação é útil de verdade — e é exatamente por isso que existe um padrão dedicado a ela.
+
+### BFF: onde a agregação legitimamente mora
+
+O **BFF (Backend for Frontend)** resolve um problema concreto: clientes diferentes precisam de formatos de resposta diferentes. Um app mobile em rede móvel quer poucos campos e poucas chamadas; uma aplicação web pode consumir dados mais ricos. Um gateway genérico serve mal aos dois ao mesmo tempo. A resposta é **um backend de composição por tipo de cliente**:
+
+```
+   ┌──────────────┐              ┌──────────────┐
+   │  App Mobile   │              │   Web App     │
+   └───────┬──────┘              └───────┬──────┘
+           ▼                             ▼
+   ┌──────────────┐              ┌──────────────┐
+   │  BFF Mobile   │              │   BFF Web     │
+   │ payload enxuto│              │ dados ricos,  │
+   │ 1 chamada     │              │ agregação     │
+   └───────┬──────┘              └───────┬──────┘
+           └──────────────┬──────────────┘
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+        [Usuários]   [Pedidos]   [Produtos]
+```
+
+A diferença em relação a colocar agregação no gateway **não é técnica, é de posicionamento e propriedade**: um BFF é um serviço próprio, versionado, testado e mantido pela equipe daquele cliente — a lógica de composição tem dono. O gateway é infraestrutura compartilhada, e regra de negócio dentro dele não tem dono claro.
+
+Vale registrar a consequência arquitetural: um BFF é, na prática, um **orquestrador**. Ao chamar três serviços e agregar as respostas, ele concentra o conhecimento do workflow (quais chamar, em que ordem, o que fazer se um falhar) — o mesmo vocabulário de orquestração vs. coreografia usado em `../system-design-pt1/arquitetura.md`, seção 6.4, para os padrões de Saga. Isso o torna um ponto central de complexidade e, se as chamadas aos serviços de origem forem seriais em vez de paralelas, um gargalo de responsividade.
 
 > **Confusão comum:** "o gateway resolve o problema de o mobile precisar chamar 5 endpoints para montar uma tela". ✅ **Mais preciso:** resolve **se** ele agregar respostas — e agregar é precisamente a responsabilidade que os livros recomendam manter **fora** do gateway genérico, porque agregação carrega regra de negócio (o que juntar, em que ordem, o que fazer se um dos serviços falhar, qual resposta parcial é aceitável). A solução recomendada é um **BFF**: um serviço de composição por tipo de cliente, atrás do gateway, com dono, ciclo de vida e testes próprios. O gateway continua fazendo o que sabe (auth, rate limit, roteamento) e encaminha para o BFF como para qualquer outro serviço.
 
@@ -176,7 +231,7 @@ Os quatro problemas têm respostas conhecidas: várias instâncias do gateway at
 | **Proxy moderno com papel de gateway** | Envoy, Traefik, HAProxy | Envoy é também o *data plane* mais comum de service meshes |
 | **Nginx configurado** | Nginx open source / Plus | Cobre roteamento, TLS, rate limit; não traz gestão de consumidores, portal, plugins de auth |
 | **Kubernetes** | Ingress NGINX, Gateway API | Interface declarativa; a implementação por baixo é um desses proxies |
-| **Construído sob medida** | FastAPI, Express | Ver o tutorial em `../system-design-pt1/api_gateway.md`, seção 5 |
+| **Construído sob medida** | FastAPI, Express, Spring Cloud Gateway | Viável para poucas rotas; vira manutenção própria conforme as políticas crescem |
 
 > **Confusão comum:** "um Ingress do Kubernetes é o API Gateway do meu cluster". ✅ **Mais preciso:** um Ingress resolve **roteamento HTTP de entrada e terminação de TLS** — ou seja, o subconjunto do gateway que um proxy reverso já cobria. Ele não traz, de fábrica, gestão de consumidores e chaves de API, quotas por cliente, transformação de requisição, versionamento de contrato, portal de documentação ou catálogo de plugins de autenticação. Na prática, muitas equipes complementam o Ingress com anotações e plugins até reconstruir um gateway parcial — o que funciona, mas convém ser uma escolha consciente. A **Gateway API** do Kubernetes foi criada justamente para expressar de forma nativa boa parte do que o Ingress não expressava.
 

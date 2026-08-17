@@ -214,7 +214,7 @@ Observações que amarram os três arquivos anteriores:
 | Roteamento por path para serviços distintos | **Nginx**, LB L7 ou **Gateway** | Nginx é a opção mais barata |
 | Versionar e depreciar contratos de API | **API Gateway** | Governança é a razão de ser do papel |
 | Cache de respostas HTTP | **Nginx** ou CDN | Gateways oferecem, mas raramente tão bem |
-| Segurança entre serviços internos | **Nenhum dos três** | É service mesh — ver `../system-design-pt1/api_gateway.md`, seção 3.1 |
+| Segurança entre serviços internos | **Nenhum dos três** | É service mesh — ver `api_gateway.md`, seção 1 |
 
 ---
 

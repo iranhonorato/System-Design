@@ -94,7 +94,7 @@ O plugin **Configuration as Code** (JCasC) lê um YAML e aplica a configuração
 # casc.yaml
 jenkins:
   systemMessage: "Jenkins da loja: configurado como código. Mudanças pela interface serão perdidas."
-  numExecutors: 0                        # nenhum build no controller (capítulo 01, seção 2.3)
+  numExecutors: 0                        # nenhum build no controller (fundamentos do Jenkins, seção 2.3)
   slaveAgentPort: 50000                  # a porta dos agentes de entrada
   securityRealm:
     local:

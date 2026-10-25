@@ -50,7 +50,7 @@ Os arquivos da parte 2 marcam explicitamente as **confusões comuns de aprendiza
 
 ## Estrutura do conteúdo
 
-O repositório está dividido em quatro blocos temáticos, na ordem de leitura sugerida:
+O repositório está dividido em cinco blocos temáticos, na ordem de leitura sugerida:
 
 **Fundamentos**
 - [system-design-pt1/infraestrutura.md](system-design-pt1/infraestrutura.md) — o que sustenta qualquer software antes do código rodar.
@@ -70,6 +70,12 @@ O repositório está dividido em quatro blocos temáticos, na ordem de leitura s
 - [system-design-pt1/redis.md](system-design-pt1/redis.md) — cache, sessões, filas e comunicação entre serviços.
 - [system-design-pt1/seguranca.md](system-design-pt1/seguranca.md) — autenticação, senhas, autorização e os ataques mais comuns.
 - [system-design-pt1/auth0.md](system-design-pt1/auth0.md) — autenticação como serviço, na prática.
+
+**DevOps: Infraestrutura, Containers, Kubernetes e AWS** (trilha didática)
+- [devops/\_\_sumario\_\_.md](devops/__sumario__.md) — trilha progressiva em doze capítulos, com exemplos executáveis e as confusões comuns de cada tema:
+  - **01–06:** da infraestrutura física ao Docker Compose e às imagens de produção (reescrita de `infraestrutura.md` e `docker.md`);
+  - **07–10:** Kubernetes de ponta a ponta: cluster, control plane, nodes, Pods, Deployments, Services, Ingress, probes, auto-scaling, ConfigMaps, Secrets, volumes, StatefulSets, RBAC, a migração do Compose e o diagnóstico de erros;
+  - **11–12:** AWS VPC (CIDR, sub-redes, rotas, Internet e NAT Gateway, Security Groups e NACLs) e IAM (políticas, roles, STS, OIDC com GitHub Actions, permissões de Pods no EKS).
 
 **Borda e Camada de Dados** (parte 2)
 - [system-design-pt2/escalabilidade_horizontal_vs_vertical.md](system-design-pt2/escalabilidade_horizontal_vs_vertical.md) — a decisão que condiciona todas as outras.

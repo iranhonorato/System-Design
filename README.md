@@ -1,6 +1,6 @@
-# DevOps: da Infraestrutura à Entrega Contínua
+# DevOps: da Infraestrutura à Observabilidade
 
-Este repositório é um guia de estudo sobre **como uma aplicação sai do código e chega aos usuários, e continua funcionando depois**. Ele percorre, em uma trilha única e progressiva, tudo o que existe entre um `git commit` e um sistema em produção: a infraestrutura que sustenta o software, os containers que o empacotam, o Kubernetes que o orquestra, a nuvem da AWS em que ele roda e os pipelines de CI/CD que automatizam todo o caminho.
+Este repositório é um guia de estudo sobre **como uma aplicação sai do código e chega aos usuários, e continua funcionando depois**. Ele percorre, em uma trilha única e progressiva, tudo o que existe entre um `git commit` e um sistema em produção: a infraestrutura que sustenta o software, os containers que o empacotam, o Kubernetes que o orquestra, a nuvem da AWS em que ele roda, os pipelines de CI/CD que automatizam todo o caminho e a observabilidade que mostra, em produção, se tudo isso está funcionando.
 
 A proposta é explicar não só **o que** cada ferramenta faz, mas **por que ela existe**: qual problema concreto motivou sua criação e qual problema novo ela deixa para a próxima resolver. Cada capítulo parte de uma situação real, resolve-a com exemplos que podem ser executados na sua máquina e termina apontando a pergunta que o capítulo seguinte responde.
 
@@ -18,9 +18,10 @@ Este projeto não é uma aplicação de software em execução, e sim uma **base
 - **AWS**: servidores EC2 e acesso por SSH, redes com VPC (CIDR, sub-redes, rotas, Internet e NAT Gateway, Security Groups e NACLs) e permissões com IAM (políticas, roles, STS, OIDC, Pod Identity no EKS);
 - **integração contínua**: a prática, a anatomia de um pipeline, GitHub Actions na prática, testes de integração com banco real, portões de qualidade e segurança (SAST, dependências, segredos, scan de imagem) e fitness functions de arquitetura;
 - **entrega e implantação contínuas**: o pipeline de implantação, artefato único promovido entre ambientes, estratégias de deploy (rolling, blue-green, canary), migrações de banco compatíveis, feature flags, deploy na EC2 e no Kubernetes, GitOps e métricas DORA;
-- **Jenkins**: arquitetura de controller e agentes, Jenkinsfile, Jenkins configurado como código, agentes efêmeros no Kubernetes, segurança e operação.
+- **Jenkins**: arquitetura de controller e agentes, Jenkinsfile, Jenkins configurado como código, agentes efêmeros no Kubernetes, segurança e operação;
+- **observabilidade**: monitoramento vs observabilidade, OpenTelemetry e o Collector, métricas com Prometheus e PromQL (percentis, sinais de ouro, RED, USE, cardinalidade), logs estruturados com Loki, traces distribuídos com Tempo (propagação de contexto, amostragem), como escolher o sinal certo para cada pergunta, uma pilha completa com Grafana, SLOs, orçamento de erro e alertas por taxa de consumo, e a observabilidade de um cluster Kubernetes.
 
-A ideia central é construir uma visão integral: entender como cada camada se apoia na anterior, e como, juntas, elas permitem que uma equipe entregue software com frequência, segurança e pouco esforço manual.
+A ideia central é construir uma visão integral: entender como cada camada se apoia na anterior, e como, juntas, elas permitem que uma equipe entregue software com frequência, segurança e pouco esforço manual, e saiba quando algo dá errado antes dos usuários.
 
 ---
 
@@ -31,7 +32,8 @@ Fornecer uma trilha de aprendizagem clara para quem deseja entender:
 - o que sustenta um software antes de qualquer linha de código rodar, e por que a indústria chegou aos containers;
 - como empacotar uma aplicação de forma que ela rode igual em qualquer lugar, e como operar muitas delas em muitas máquinas;
 - como a rede e as permissões da nuvem protegem um sistema em produção;
-- como automatizar o caminho do código até a produção, com verificações em cada etapa e recuperação rápida quando algo dá errado.
+- como automatizar o caminho do código até a produção, com verificações em cada etapa e recuperação rápida quando algo dá errado;
+- como saber, em produção, se o sistema está funcionando bem para os usuários, e como encontrar a causa quando não está.
 
 Não é preciso conhecimento prévio de infraestrutura ou DevOps: o primeiro capítulo parte do zero, e cada leitura seguinte assume apenas o vocabulário das anteriores. Ajuda ter familiaridade com a linha de comando, Git e alguma linguagem de programação (os exemplos usam Python/FastAPI).
 
@@ -83,7 +85,20 @@ O repositório está dividido em pastas numeradas. Dentro de cada uma, os capít
 │       ├── 02_jenkinsfile_e_pipelines.md             a linguagem do Jenkinsfile
 │       └── 03_jenkins_na_pratica.md                  JCasC, Multibranch, o CI/CD completo
 │
-└── 04-observabilidade/                        ── (em preparação)
+└── 04-observabilidade/                        ── saber se funciona, e por que não
+    ├── SUMARIO.md
+    ├── fundamentos/
+    │   ├── 01_monitoramento_e_observabilidade.md     os sinais e que pergunta cada um responde
+    │   └── 02_telemetria_e_opentelemetry.md          API, SDK, OTLP, Collector
+    ├── sinais/
+    │   ├── 01_metricas.md                            Prometheus, PromQL, percentis, cardinalidade
+    │   ├── 02_logs.md                                logs estruturados, correlação, Loki
+    │   ├── 03_traces.md                              spans, cascata, propagação, amostragem
+    │   └── 04_escolhendo_o_sinal_certo.md            critérios, cenários e o fluxo de investigação
+    └── pratica/
+        ├── 01_stack_de_observabilidade.md            OTel + Prometheus + Loki + Tempo + Grafana
+        ├── 02_slos_e_alertas.md                      SLI, SLO, orçamento de erro, Alertmanager
+        └── 03_observabilidade_no_kubernetes.md       cluster, Operator, eventos, canary por métricas
 ```
 
 ---
@@ -114,6 +129,9 @@ A numeração das pastas indica os grandes blocos, mas a **ordem de leitura reco
           │
           ▼
  ⑦ Jenkins                          03-entrega-continua/jenkins/     (3 capítulos)
+          │
+          ▼
+ ⑧ Observabilidade                  04-observabilidade/              (9 capítulos)
 ```
 
 Comece por [01-infraestrutura/fundamentos/01_o_que_e_infraestrutura.md](01-infraestrutura/fundamentos/01_o_que_e_infraestrutura.md). Cada capítulo termina com uma seção **Próximo passo**, que aponta exatamente o capítulo seguinte dessa trilha, de modo que é possível percorrê-la inteira sem voltar a este README.
@@ -130,6 +148,8 @@ Nem todo objetivo exige a trilha completa:
 | Entender rede e permissões na AWS | [EC2](01-infraestrutura/aws/01_ec2_servidores_na_nuvem.md) → [VPC](01-infraestrutura/aws/02_vpc_redes_na_aws.md) → [IAM](01-infraestrutura/aws/03_iam_identidades_e_permissoes.md) (as seções sobre EKS podem ficar para depois) |
 | Montar CI/CD com GitHub Actions | ⑤ → ⑥ |
 | Trabalhar com Jenkins | [CI: fundamentos](03-entrega-continua/ci/01_fundamentos_de_integracao_continua.md) → ⑥ → ⑦ |
+| Entender métricas, logs e traces e quando usar cada um | ② → [observabilidade: fundamentos e sinais](04-observabilidade/SUMARIO.md) (capítulos ① a ⑥) |
+| Montar uma pilha de observabilidade e alertas | ② → ⑧ (os capítulos de Kubernetes da observabilidade pedem também ③) |
 
 ### Consultando por assunto
 
@@ -138,6 +158,7 @@ Cada `SUMARIO.md` termina com uma tabela **"Quero entender... → Leia"**:
 - [01-infraestrutura/SUMARIO.md](01-infraestrutura/SUMARIO.md)
 - [02-containers/SUMARIO.md](02-containers/SUMARIO.md)
 - [03-entrega-continua/SUMARIO.md](03-entrega-continua/SUMARIO.md)
+- [04-observabilidade/SUMARIO.md](04-observabilidade/SUMARIO.md)
 
 ---
 
@@ -151,7 +172,7 @@ Todos os capítulos seguem o mesmo formato, para que a leitura seja previsível:
 - **"Confusão comum → Mais preciso"**: blocos que destacam os erros de entendimento mais frequentes sobre cada tema, aqueles que normalmente só aparecem quando algo quebra em produção. Por exemplo: *"o pipeline está verde, então o código está correto"*, *"um container é uma VM mais leve"*, *"base64 é criptografia"*.
 - **"Próximo passo"**: a pergunta que o capítulo deixa em aberto e o capítulo que a responde.
 
-Um mesmo sistema atravessa a trilha inteira: a **API de uma loja virtual** em FastAPI, com Postgres e Redis. Ele começa como um container, vira um Compose, migra para o Kubernetes, roda em uma EC2 e em um cluster EKS, e termina sendo testado e implantado automaticamente por pipelines no GitHub Actions e no Jenkins.
+Um mesmo sistema atravessa a trilha inteira: a **API de uma loja virtual** em FastAPI, com Postgres e Redis. Ele começa como um container, vira um Compose, migra para o Kubernetes, roda em uma EC2 e em um cluster EKS, passa a ser testado e implantado automaticamente por pipelines no GitHub Actions e no Jenkins, e, na parte de observabilidade, é dividido em três microsserviços (`loja`, `pedidos` e `pagamentos`) instrumentados com OpenTelemetry.
 
 ---
 
@@ -159,16 +180,16 @@ Um mesmo sistema atravessa a trilha inteira: a **API de uma loja virtual** em Fa
 
 Onde o assunto é tratado por elas, o material se apoia em três referências centrais de arquitetura de software:
 
-- *Fundamentals of Software Architecture*, de Mark Richards e Neal Ford: características operacionais, implantabilidade e *fitness functions*;
-- *Software Architecture: The Hard Parts*, de Neal Ford, Mark Richards, Pramod Sadalage e Zhamak Dehghani: modularidade, implantação independente e o padrão sidecar;
-- *System Design Interview*, de Alex Xu: o caminho de uma requisição, a arquitetura em camadas e a replicação entre data centers.
+- *Fundamentals of Software Architecture*, de Mark Richards e Neal Ford: características operacionais, implantabilidade, *fitness functions*, logging distribuído e o sidecar para monitoramento;
+- *Software Architecture: The Hard Parts*, de Neal Ford, Mark Richards, Pramod Sadalage e Zhamak Dehghani: modularidade, implantação independente, acoplamento operacional e o padrão sidecar;
+- *System Design Interview*, de Alex Xu: o caminho de uma requisição, a arquitetura em camadas, a replicação entre data centers e as categorias de métricas.
 
-Para os temas operacionais que esses livros não cobrem em detalhe (Docker, Kubernetes, AWS, GitHub Actions, Jenkins), o conteúdo segue as **documentações oficiais** de cada ferramenta e referências consolidadas da área, como *Continuous Delivery* (Jez Humble e David Farley), os textos de Martin Fowler sobre integração contínua e o programa de pesquisa DORA. Cada capítulo cita, no cabeçalho, as fontes que usou.
+Para os temas operacionais que esses livros não cobrem em detalhe (Docker, Kubernetes, AWS, GitHub Actions, Jenkins, OpenTelemetry, Prometheus, Grafana), o conteúdo segue as **documentações oficiais** de cada ferramenta e referências consolidadas da área, como *Continuous Delivery* (Jez Humble e David Farley), os textos de Martin Fowler sobre integração contínua, o programa de pesquisa DORA, os livros de SRE do Google (*Site Reliability Engineering* e *The Site Reliability Workbook*) e *Observability Engineering* (Charity Majors, Liz Fong-Jones e George Miranda). Cada capítulo cita, no cabeçalho, as fontes que usou.
 
-As versões de ferramentas, imagens e actions citadas nos exemplos refletem o estado delas em outubro de 2026. Elas mudam com frequência: antes de copiar um exemplo para um projeto real, confira a versão atual.
+As versões de ferramentas, pacotes e actions citadas nos exemplos refletem o estado delas em outubro de 2026; as imagens do laboratório de observabilidade estão fixadas em versões estáveis de referência. Tudo isso muda com frequência: antes de copiar um exemplo para um projeto real, confira a versão atual.
 
 ---
 
 ## Conclusão
 
-Este repositório tenta transformar um conjunto de ferramentas que costuma ser aprendido solto e fora de ordem (Docker, Kubernetes, AWS, CI/CD, Jenkins) em uma trilha coesa, em que cada capítulo explica o problema que motivou o próximo. Ao final, a mesma linha de código percorre todo o caminho: entra na `main` por um pull request verificado em minutos, vira uma imagem com uma tag única, é implantada em homologação e em produção com uma estratégia segura e rollback automático, e roda em um cluster dentro de uma rede privada, acessando a nuvem com permissões mínimas, tudo descrito em arquivos versionados.
+Este repositório tenta transformar um conjunto de ferramentas que costuma ser aprendido solto e fora de ordem (Docker, Kubernetes, AWS, CI/CD, Jenkins, observabilidade) em uma trilha coesa, em que cada capítulo explica o problema que motivou o próximo. Ao final, a mesma linha de código percorre todo o caminho: entra na `main` por um pull request verificado em minutos, vira uma imagem com uma tag única, é implantada em homologação e em produção com uma estratégia segura e rollback automático, roda em um cluster dentro de uma rede privada, acessando a nuvem com permissões mínimas, e emite métricas, logs e traces que mostram se ela está atendendo bem os usuários, e decidem até se o próximo deploy continua. Tudo descrito em arquivos versionados.

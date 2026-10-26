@@ -259,7 +259,7 @@ spec:
           - templateName: taxa-de-erro-baixa   # consulta o Prometheus a cada passo
 ```
 
-O `AnalysisTemplate` referenciado faz uma consulta ao sistema de métricas (por exemplo, "a porcentagem de respostas 5xx da versão nova nos últimos 5 minutos") e reprova o passo se o valor passar do limite. Reprovado um passo, o Rollout volta todo o tráfego para a versão estável. A qualidade de um canary depende inteiramente da qualidade das métricas, e é por isso que a observabilidade é o tema que vem depois de CD nesta trilha.
+O `AnalysisTemplate` referenciado faz uma consulta ao sistema de métricas (por exemplo, "a porcentagem de respostas 5xx da versão nova nos últimos 5 minutos") e reprova o passo se o valor passar do limite. Reprovado um passo, o Rollout volta todo o tráfego para a versão estável. A qualidade de um canary depende inteiramente da qualidade das métricas, e é por isso que a observabilidade é o tema que vem depois de CD nesta trilha. O `AnalysisTemplate` completo, consultando o Prometheus, está em [../../04-observabilidade/pratica/03_observabilidade_no_kubernetes.md](../../04-observabilidade/pratica/03_observabilidade_no_kubernetes.md), seção 8.
 
 Na AWS, sem Kubernetes, o mesmo efeito é obtido com **pesos** entre target groups de um Application Load Balancer (95% para o *estável*, 5% para o *canary*), ajustados pelo pipeline.
 

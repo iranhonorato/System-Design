@@ -124,7 +124,7 @@ A linguagem do **Jenkinsfile**: declarativo vs scripted, a estrutura de um pipel
 
 O **Jenkins como código** (imagem com plugins e **Configuration as Code**), um agente com Docker separado do controller (e o custo de montar o socket), o **Multibranch Pipeline** ligado ao GitHub por webhook e com status nos PRs, o **Jenkinsfile completo** da loja (verificações em paralelo, integração com Postgres, publicação, homologação, aprovação e produção com rollback), **agentes efêmeros no Kubernetes**, **segurança e operação**, diagnóstico e a comparação final entre Jenkins, GitHub Actions e GitLab CI.
 
-> **Continua em:** observabilidade, a próxima parte do repositório.
+> **Continua em:** [../04-observabilidade/SUMARIO.md](../04-observabilidade/SUMARIO.md), a próxima parte do repositório.
 
 ---
 
